@@ -1,6 +1,18 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-const CHANNELS = ["network-info", "phone-status", "vigem-status", "telemetry", "latency"];
+const CHANNELS = [
+  "network-info",
+  "phone-status",
+  "vigem-status",
+  "telemetry",
+  "latency",
+  "leaderboard",
+  "session-info",
+  "flags",
+  "penalties",
+  "track-trace",
+  "car-positions",
+];
 
 contextBridge.exposeInMainWorld("pitwall", {
   on: (channel, callback) => {
