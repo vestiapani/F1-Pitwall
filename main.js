@@ -111,15 +111,25 @@ function getLocalIP() {
   return "127.0.0.1";
 }
 
+let lastPhoneEmit = {};
+
 function send(channel, payload) {
-  // 1. Kirim ke layar PC (Electron Renderer)
+  // 1. Kirim ke layar PC -> GAS TERUS 60FPS!
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload);
   }
 
-  // 2. FIX: Broadcast juga ke HP (React Native) via socket.io
+  // 2. Broadcast ke HP (React Native) -> KITA THROTTLE BIAR SETIR GAK DELAY
   if (io) {
-    io.volatile.emit(channel, payload);
+    const now = Date.now();
+    if (channel === "telemetry" || channel === "car-positions") {
+      if (!lastPhoneEmit[channel] || now - lastPhoneEmit[channel] >= 50) {
+        io.volatile.emit(channel, payload);
+        lastPhoneEmit[channel] = now;
+      }
+    } else {
+      io.volatile.emit(channel, payload);
+    }
   }
 }
 

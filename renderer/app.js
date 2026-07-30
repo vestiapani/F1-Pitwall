@@ -385,7 +385,16 @@ window.pitwall.on("leaderboard", (rows) => {
     const totalLaps = counter.textContent.split("/")[1] || "?";
     counter.textContent = `L${me.lapNum ?? "?"}/${totalLaps}`;
 
-    // feed the LAP chart: one point per completed lap of the player's own race
+    if (me.intervalM != null) {
+      const deltaEl = document.getElementById("deltaval");
+      if (deltaEl) {
+        const val = me.intervalM;
+        deltaEl.textContent = (val > 0 ? "+" : "") + val.toFixed(1) + "m";
+        deltaEl.classList.remove("neg", "pos");
+        deltaEl.classList.add(val < 0 ? "neg" : "pos");
+      }
+    }
+
     if (me.lastLapMs && me.lastLapMs !== lastSeenLapMs) {
       lastSeenLapMs = me.lastLapMs;
       lapTimesHistory.push(me.lastLapMs);
