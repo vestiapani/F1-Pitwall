@@ -206,7 +206,7 @@ function startCoreServer() {
   let lastMotionTime = 0;
   let lastSessionTime = 0;
 
-  // ---- own-car telemetry (gear/speed/rpm/throttle/brake/tyres) ----
+  // ---- own-car telemetry (gear/speed/rpm/throttle/brake/tyres + brake temps/pressures) ----
   f1.on(PACKETS.carTelemetry, (data) => {
     const now = Date.now();
     if (now - lastCarTelemetryTime < 50) return;
@@ -220,6 +220,10 @@ function startCoreServer() {
       maxRpm: p.m_engineRpmMax || p.m_engineRPMMax || 13000,
       drs: p.m_drs,
       tyreTemp: p.m_tyresSurfaceTemperature,
+      // extra: brake temps (°C) and tyre pressures (psi), same [RL,RR,FL,FR] order
+      // as tyresSurfaceTemperature per the F1 2020 UDP spec.
+      brakeTemp: p.m_brakesTemperature,
+      tyrePressure: p.m_tyresPressure,
       throttle: p.m_throttle,
       brake: p.m_brake,
     };
@@ -234,7 +238,18 @@ function startCoreServer() {
     send("telemetry", {
       ersMode: p.m_ersDeployMode,
       ersEnergy: p.m_ersStoreEnergy,
+      ersHarvestMGUK: p.m_ersHarvestedThisLapMGUK,
+      ersHarvestMGUH: p.m_ersHarvestedThisLapMGUH,
       fuel: p.m_fuelInTank,
+      // extra: race-strategy relevant fields already in CarStatus but previously unused
+      fuelRemainingLaps: p.m_fuelRemainingLaps,
+      fuelMix: p.m_fuelMix,
+      brakeBias: p.m_frontBrakeBias,
+      tractionControl: p.m_tractionControl,
+      absEnabled: p.m_antiLockBrakes,
+      pitLimiter: p.m_pitLimiterStatus,
+      tyreCompound: p.m_visualTyreCompound,
+      tyreAge: p.m_tyresAgeLaps,
     });
 
     // F1 2020-specific: per-car FIA flag shown to the player right now (own car),
@@ -421,7 +436,7 @@ function startCoreServer() {
     }
   });
 
-  // ---- motion: world coordinates -> live track trace + car dots ----
+  // ---- motion: world coordinates -> live track trace + car dots + own-car g-force ----
   f1.on(PACKETS.motion, (data) => {
     const now = Date.now();
     if (now - lastMotionTime < 66) return; // ~15Hz is plenty for a map
@@ -435,6 +450,16 @@ function startCoreServer() {
       isPlayer: idx === session.playerIndex,
     }));
     session.carPositions = positions;
+
+    // Own-car g-force readout, straight from the Motion packet.
+    const myMotion = cars[session.playerIndex];
+    if (myMotion) {
+      send("telemetry", {
+        gForceLat: myMotion.m_gForceLateral,
+        gForceLon: myMotion.m_gForceLongitudinal,
+        gForceVert: myMotion.m_gForceVertical,
+      });
+    }
 
     // Trace the player's own line as the track outline until we have a closed loop.
     const me = positions[session.playerIndex];
@@ -491,7 +516,7 @@ function createWindow() {
     height: 900,
     minWidth: 1200,
     minHeight: 760,
-    backgroundColor: "#0a0c10",
+    backgroundColor: "#000000",
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),

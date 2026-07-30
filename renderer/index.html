@@ -5,15 +5,15 @@
 <title>PITWALL — F1 Remote Control</title>
 <style>
   :root{
-    --bg:#0a0c10;
-    --panel:#11151c;
-    --panel-2:#151a22;
-    --panel-3:#0d1117;
-    --line:#232b38;
-    --line-soft:#1a212c;
-    --text:#c9d4e0;
-    --text-dim:#5b6b80;
-    --text-mid:#8b9bb0;
+    --bg:#000000;
+    --panel:#0c0c0c;
+    --panel-2:#121212;
+    --panel-3:#080808;
+    --line:#262626;
+    --line-soft:#191919;
+    --text:#d4d4d4;
+    --text-dim:#6e6e6e;
+    --text-mid:#9a9a9a;
     --cyan:#00d4ff;
     --red:#ff2b4d;
     --amber:#ffb020;
@@ -28,7 +28,8 @@
   html,body{
     background:var(--bg); color:var(--text);
     font-family:var(--mono);
-    height:100%; overflow:hidden;
+    height:100%;
+    overflow:hidden; /* whole app fits the viewport — internal panels scroll if they must */
     -webkit-font-smoothing:antialiased;
   }
   body{
@@ -64,21 +65,42 @@
   #trackStatusChip{ font-weight:700; }
   #trackStatusChip.clear .val{ color:var(--green); }
   #trackStatusChip.sc .val, #trackStatusChip.vsc .val{ color:var(--amber); }
+
+  /* ---------- connection mode toggle (wifi / usb-adb) ---------- */
+  #connModeChip{ gap:6px; }
+  .modebtn{
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text-dim);
+    font-family:var(--cond); font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+    font-size:9.5px; padding:3px 8px; border-radius:2px; cursor:pointer;
+  }
+  .modebtn:hover{ color:var(--text); }
+  .modebtn.active{ color:var(--cyan); border-color:var(--cyan); background:rgba(0,212,255,0.1); }
+  .modebtn.warn{ color:var(--red); border-color:var(--red); }
+  #adbStatus{ font-size:9px; color:var(--text-dim); margin-left:2px; }
+
+  /* ---------- page nav ---------- */
+  #pageNav{ margin-left:auto; display:flex; align-items:stretch; }
+  .navbtn{
+    background:var(--panel); border:none; border-left:1px solid var(--line);
+    color:var(--text-dim); font-family:var(--cond); font-weight:700; letter-spacing:.12em;
+    font-size:11px; text-transform:uppercase; padding:0 16px; cursor:pointer;
+  }
+  .navbtn:hover{ color:var(--text); }
+  .navbtn.active{ color:var(--cyan); background:var(--panel-2); box-shadow:inset 0 -2px 0 var(--cyan); }
   #brand{
-    margin-left:auto; padding:7px 16px; display:flex; align-items:center; gap:8px;
+    padding:7px 16px; display:flex; align-items:center; gap:8px; border-left:1px solid var(--line);
     font-family:var(--cond); font-weight:700; letter-spacing:.18em; font-size:12px; color:var(--text-dim);
   }
   #brand b{color:var(--red);}
 
-  /* ---------- main layout: broadcast-style 2 zones stacked ---------- */
+  /* ---------- main layout ---------- */
   #app{ flex:1; display:flex; flex-direction:column; min-height:0; gap:1px; background:var(--line); padding:1px; }
 
-  /* ===== ZONE A: leaderboard + track/telemetry summary ===== */
-  #zoneA{ display:grid; grid-template-columns: 1fr 420px; gap:1px; background:var(--line); flex:1.7; min-height:0; }
+  #zoneA{ display:grid; grid-template-columns: 1fr clamp(320px, 30vw, 480px); gap:1px; background:var(--line); flex:1.7; min-height:0; }
 
   .panel{
     background:var(--panel); border:1px solid var(--line);
-    display:flex; flex-direction:column; overflow:hidden;
+    display:flex; flex-direction:column; overflow:hidden; min-height:0;
   }
   .panel > .hd{
     font-family:var(--cond); font-size:10.5px; letter-spacing:.13em; text-transform:uppercase;
@@ -89,7 +111,7 @@
 
   /* leaderboard table */
   #leaderboardPanel{ grid-column:1; grid-row:1; }
-  table.lb{ width:100%; border-collapse:collapse; font-size:11.5px; }
+  table.lb{ width:100%; border-collapse:collapse; font-size:clamp(10.5px, 1.1vh, 12.5px); }
   table.lb thead th{
     position:sticky; top:0; background:var(--panel-2); color:var(--text-dim);
     font-family:var(--cond); font-weight:500; letter-spacing:.08em; text-transform:uppercase;
@@ -107,15 +129,13 @@
   .pit-badge{ font-size:9px; color:var(--red); border:1px solid var(--red); padding:0 4px; border-radius:2px; }
   .lb-num{ font-variant-numeric: tabular-nums; }
 
-  /* ===== ZONE A right: track map ===== */
+  /* track map */
   #mapPanel{ grid-column:2; grid-row:1; }
   #mapPanel .bd{ position:relative; display:flex; align-items:center; justify-content:center; }
   #trackSvg{ width:100%; height:100%; }
   .track-outline{ fill:none; stroke:#2b3648; stroke-width:2.4; }
-  .track-outline-inner{ fill:none; stroke:#161c26; stroke-width:1; }
   .car-dot{ transition: cx .15s linear, cy .15s linear; }
   .car-dot.player{ stroke:var(--cyan); stroke-width:1.5; }
-  .car-dot-label{ font-family:var(--cond); font-size:6px; fill:var(--text-dim); }
   #mapMeta{
     position:absolute; top:6px; left:8px; font-family:var(--cond); font-size:11px;
     color:var(--text-dim); letter-spacing:.05em; line-height:1.5;
@@ -126,41 +146,69 @@
     font-family:var(--cond); letter-spacing:.05em;
   }
 
-  /* ===== ZONE B: gear/speed | rpm+chart | tyres+ers | flags+penalties ===== */
-  #zoneB{ display:grid; grid-template-columns: 260px 1fr 260px 300px; gap:1px; background:var(--line); flex:1; min-height:0; }
+  /* ===== ZONE B: gear/speed | rpm+chart | tyres+brakes | ers/fuel/status | flags+penalties ===== */
+  #zoneB{
+    display:grid;
+    grid-template-columns: clamp(190px,17vw,260px) 1fr clamp(210px,19vw,280px) clamp(230px,20vw,300px);
+    gap:1px; background:var(--line); flex:1; min-height:0;
+  }
 
   #gearblock{ grid-column:1; }
-  #gearblock .bd{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; overflow:hidden;}
-  #gearval{ font-size:110px; font-weight:800; line-height:1; color:var(--cyan); font-family:var(--cond);}
+  #gearblock .bd{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; overflow:hidden; padding:4px;}
+  #gearval{ font-size:clamp(42px, 9.5vh, 110px); font-weight:800; line-height:1; color:var(--cyan); font-family:var(--cond);}
   #gearval.redline{ color:var(--red); }
-  #speedval{ font-size:26px; color:var(--text); letter-spacing:.03em;}
-  #speedval span{ font-size:12px; color:var(--text-dim); margin-left:5px;}
-  #deltaval{ margin-top:10px; font-size:17px; padding:3px 10px; border:1px solid var(--line); }
+  #speedval{ font-size:clamp(17px, 2.6vh, 26px); color:var(--text); letter-spacing:.03em;}
+  #speedval span{ font-size:11px; color:var(--text-dim); margin-left:5px;}
+  #deltaval{ margin-top:6px; font-size:clamp(13px,1.6vh,17px); padding:3px 10px; border:1px solid var(--line); }
   #deltaval.neg{ color:var(--green); border-color:var(--green); }
   #deltaval.pos{ color:var(--red); border-color:var(--red); }
 
-  #centercol{ grid-column:2; display:flex; flex-direction:column; gap:1px; background:var(--line);}
+  /* g-force mini gauge */
+  #gforceWrap{ display:flex; align-items:center; gap:10px; margin-top:8px; }
+  #gforceBox{
+    width:52px; height:52px; border:1px solid var(--line); border-radius:4px; position:relative;
+    background:var(--panel-2); flex:none;
+  }
+  #gforceBox::before, #gforceBox::after{
+    content:""; position:absolute; background:var(--line-soft);
+  }
+  #gforceBox::before{ top:50%; left:2px; right:2px; height:1px; }
+  #gforceBox::after{ left:50%; top:2px; bottom:2px; width:1px; }
+  #gforceDot{
+    position:absolute; width:8px; height:8px; margin:-4px 0 0 -4px; border-radius:50%;
+    background:var(--amber); left:50%; top:50%; box-shadow:0 0 6px var(--amber);
+    transition:left .08s linear, top .08s linear;
+  }
+  #gforceText{ font-size:10px; color:var(--text-dim); line-height:1.6; }
+  #gforceText b{ color:var(--text); font-weight:600; }
+
+  #centercol{ grid-column:2; display:flex; flex-direction:column; gap:1px; background:var(--line); min-height:0;}
   #centercol .panel{ border:none; }
+  #rpmpanel{ flex:none; }
   #rpmpanel .bd{ display:flex; align-items:center; padding:10px 12px; overflow:visible; }
-  #rpmbar{ display:flex; gap:3px; width:100%; height:20px; }
+  #rpmbar{ display:flex; gap:3px; width:100%; height:clamp(14px,2vh,20px); }
   .rpmled{ flex:1; background:#1a1f28; border-radius:2px; }
-  #rpmnum{ margin-left:12px; font-size:16px; color:var(--text-dim); width:80px; text-align:right; }
+  #rpmnum{ margin-left:12px; font-size:clamp(12px,1.6vh,16px); color:var(--text-dim); width:80px; text-align:right; }
   #chartpanel{ flex:1; min-height:0; }
   #chartpanel .bd{ padding:5px; overflow:hidden; }
   canvas{ width:100%; height:100%; display:block; }
 
-  #tyresrscol{ grid-column:3; display:flex; flex-direction:column; gap:1px; background:var(--line);}
+  #tyresrscol{ grid-column:3; display:flex; flex-direction:column; gap:1px; background:var(--line); min-height:0;}
   #tyresrscol .panel{ border:none; }
-  #tyresvg{ width:100%; }
-  .tyre-readout{ display:grid; grid-template-columns:1fr 1fr; gap:5px; margin-top:6px; font-size:11px;}
-  .tyre-readout div{ background:var(--panel-2); border:1px solid var(--line); padding:5px 6px; text-align:center; }
+  #tyresvg{ width:100%; max-height:22vh; }
+  .tyre-readout{ display:grid; grid-template-columns:1fr 1fr; gap:5px; margin-top:6px; font-size:10.5px;}
+  .tyre-readout div{ background:var(--panel-2); border:1px solid var(--line); padding:4px 6px; text-align:center; }
+  .sub-label{ font-family:var(--cond); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim); margin:8px 0 3px; }
 
-  .kv{ display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px dashed var(--line); font-size:11px;}
+  .kv{ display:flex; justify-content:space-between; padding:3.5px 0; border-bottom:1px dashed var(--line); font-size:10.5px;}
   .kv:last-child{ border-bottom:none; }
   .kv .k{ color:var(--text-dim); }
   .kv .v{ color:var(--text); font-weight:600; }
+  .kv .v.on{ color:var(--green); }
+  .kv .v.off{ color:var(--text-dim); }
+  .kv .v.warn{ color:var(--amber); }
 
-  #flagpencol{ grid-column:4; display:flex; flex-direction:column; gap:1px; background:var(--line); }
+  #flagpencol{ grid-column:4; display:flex; flex-direction:column; gap:1px; background:var(--line); min-height:0; }
   #flagpencol .panel{ border:none; }
 
   /* flags panel */
@@ -195,6 +243,41 @@
   ::-webkit-scrollbar{ width:6px; height:6px; }
   ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:3px; }
   ::-webkit-scrollbar-track{ background:var(--panel); }
+
+  /* =========================================================
+     PAGE MODES — same DOM, CSS just re-weights/hides sections
+     so each page fills the viewport with no page-level scroll.
+     ========================================================= */
+
+  /* TELEMETRY page: hide timing zone + flags/penalties column,
+     blow up the car panels to fill the screen. */
+  #app[data-page="telemetry"] #zoneA{ display:none; }
+  #app[data-page="telemetry"] #zoneB{ flex:1; }
+  #app[data-page="telemetry"] #flagpencol{ display:none; }
+  #app[data-page="telemetry"] #zoneB{
+    grid-template-columns: clamp(260px,22vw,380px) 1fr clamp(300px,26vw,420px);
+  }
+  #app[data-page="telemetry"] #gearval{ font-size:clamp(70px, 20vh, 220px); }
+  #app[data-page="telemetry"] #speedval{ font-size:clamp(22px, 4.5vh, 40px); }
+  #app[data-page="telemetry"] #deltaval{ font-size:clamp(16px, 2.6vh, 24px); }
+  #app[data-page="telemetry"] #gforceBox{ width:84px; height:84px; }
+  #app[data-page="telemetry"] #gforceText{ font-size:12px; }
+  #app[data-page="telemetry"] #rpmbar{ height:clamp(22px,4vh,34px); }
+  #app[data-page="telemetry"] .tyre-readout{ font-size:12px; }
+  #app[data-page="telemetry"] .kv{ font-size:12px; padding:6px 0; }
+  #app[data-page="telemetry"] #tyresvg{ max-height:26vh; }
+
+  /* TIMING page: hide the car-telemetry zone (except keep flags/
+     penalties visible), blow up leaderboard + track map. */
+  #app[data-page="timing"] #zoneB{ flex:0 0 auto; }
+  #app[data-page="timing"] #gearblock,
+  #app[data-page="timing"] #centercol,
+  #app[data-page="timing"] #tyresrscol{ display:none; }
+  #app[data-page="timing"] #zoneB{ grid-template-columns: 1fr; height:34vh; }
+  #app[data-page="timing"] #zoneA{ flex:1; grid-template-columns: 1fr clamp(420px, 38vw, 640px); }
+  #app[data-page="timing"] table.lb{ font-size:clamp(12px, 1.5vh, 15px); }
+  #app[data-page="timing"] table.lb thead th{ font-size:11px; padding:7px 10px; }
+  #app[data-page="timing"] table.lb td{ padding:6px 10px; }
 </style>
 </head>
 <body>
@@ -208,10 +291,21 @@
     <div class="tchip"><span class="label">Track</span><span class="val" id="trackVal">—</span></div>
     <div class="tchip"><span class="label">Cuaca</span><span class="val" id="weatherVal">—</span></div>
     <div class="tchip clear" id="trackStatusChip"><span class="label">Status</span><span class="val" id="statusVal">CLEAR</span></div>
+    <div class="tchip" id="connModeChip">
+      <span class="label">Koneksi</span>
+      <button class="modebtn active" id="btnWifi" type="button" title="Sambung via WiFi (default, tanpa kabel)">WiFi</button>
+      <button class="modebtn" id="btnUsb" type="button" title="Sambung via kabel USB (adb reverse tcp:3000)">USB</button>
+      <span id="adbStatus"></span>
+    </div>
+    <div id="pageNav">
+      <button class="navbtn active" data-page="overview">Overview</button>
+      <button class="navbtn" data-page="telemetry">Telemetry</button>
+      <button class="navbtn" data-page="timing">Timing</button>
+    </div>
     <div id="brand">PIT<b>WALL</b> · F1 REMOTE</div>
   </div>
 
-  <div id="app">
+  <div id="app" data-page="overview">
 
     <div id="zoneA">
       <div class="panel" id="leaderboardPanel">
@@ -252,6 +346,13 @@
           <div id="gearval">N</div>
           <div id="speedval">0<span>KM/H</span></div>
           <div id="deltaval">+0.000</div>
+          <div id="gforceWrap">
+            <div id="gforceBox"><div id="gforceDot"></div></div>
+            <div id="gforceText">
+              LAT <b id="gLatVal">0.0</b>G<br/>
+              LON <b id="gLonVal">0.0</b>G
+            </div>
+          </div>
         </div>
       </div>
 
@@ -270,7 +371,7 @@
       </div>
 
       <div id="tyresrscol">
-        <div class="panel">
+        <div class="panel" id="tyrePanel">
           <div class="hd">BAN &amp; SUHU</div>
           <div class="bd">
             <svg id="tyresvg" viewBox="0 0 120 90">
@@ -286,14 +387,38 @@
               <div id="txtRL">RL —°</div>
               <div id="txtRR">RR —°</div>
             </div>
+            <div class="sub-label">Suhu Rem</div>
+            <div class="tyre-readout">
+              <div id="txtBFL">FL —°</div>
+              <div id="txtBFR">FR —°</div>
+              <div id="txtBRL">RL —°</div>
+              <div id="txtBRR">RR —°</div>
+            </div>
+            <div class="sub-label">Tekanan Ban (psi)</div>
+            <div class="tyre-readout">
+              <div id="txtPFL">FL —</div>
+              <div id="txtPFR">FR —</div>
+              <div id="txtPRL">RL —</div>
+              <div id="txtPRR">RR —</div>
+            </div>
           </div>
         </div>
-        <div class="panel">
-          <div class="hd">ERS / FUEL / DRS</div>
+        <div class="panel" id="ersPanel">
+          <div class="hd">ERS / FUEL / STATUS</div>
           <div class="bd">
             <div class="kv"><span class="k">Mode ERS</span><span class="v" id="ersMode">NONE</span></div>
-            <div class="kv"><span class="k">Energi</span><span class="v" id="ersEnergy">0%</span></div>
+            <div class="kv"><span class="k">Energi ERS</span><span class="v" id="ersEnergy">0%</span></div>
+            <div class="kv"><span class="k">Harvest MGU-K</span><span class="v" id="ersHarvestK">—</span></div>
+            <div class="kv"><span class="k">Harvest MGU-H</span><span class="v" id="ersHarvestH">—</span></div>
             <div class="kv"><span class="k">Bahan Bakar</span><span class="v" id="fuelVal">0.0 KG</span></div>
+            <div class="kv"><span class="k">Sisa (Lap)</span><span class="v" id="fuelLapsVal">—</span></div>
+            <div class="kv"><span class="k">Fuel Mix</span><span class="v" id="fuelMixVal">—</span></div>
+            <div class="kv"><span class="k">Ban</span><span class="v" id="tyreCompoundVal">—</span></div>
+            <div class="kv"><span class="k">Umur Ban</span><span class="v" id="tyreAgeVal">— lap</span></div>
+            <div class="kv"><span class="k">Brake Bias</span><span class="v" id="brakeBiasVal">—</span></div>
+            <div class="kv"><span class="k">Traction Ctrl</span><span class="v" id="tcVal">—</span></div>
+            <div class="kv"><span class="k">ABS</span><span class="v" id="absVal">—</span></div>
+            <div class="kv"><span class="k">Pit Limiter</span><span class="v" id="pitLimiterVal">—</span></div>
             <div class="kv"><span class="k">DRS</span><span class="v" id="drsVal">OFF</span></div>
           </div>
         </div>

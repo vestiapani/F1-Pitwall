@@ -1,7 +1,58 @@
 // ---------------------------------------------------------------------------
 // PITWALL renderer — status chips, leaderboard, track map, flags/penalties,
-// and own-car telemetry (gear/speed/rpm/tyres/throttle-brake trace).
+// own-car telemetry (gear/speed/rpm/tyres/throttle-brake trace), plus the
+// Overview / Telemetry / Timing page switcher.
 // ---------------------------------------------------------------------------
+
+// ---- page switcher ----
+// All panels always live in the DOM and keep receiving live data no matter
+// which page is active — switching pages just re-weights/hides sections via
+// CSS ([data-page="..."] rules in index.html), so nothing needs to reload.
+const appRoot = document.getElementById("app");
+document.querySelectorAll(".navbtn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document
+      .querySelectorAll(".navbtn")
+      .forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    appRoot.dataset.page = btn.dataset.page;
+  });
+});
+
+// ---- connection mode: WiFi (default, no action needed) vs USB (adb reverse) ----
+// The socket.io server always listens on 0.0.0.0:3000, so WiFi just works as long
+// as the phone and PC share a network. "USB" additionally runs `adb reverse
+// tcp:3000 tcp:3000` so a phone plugged in with USB debugging on can reach the
+// server via 127.0.0.1:3000 even with no shared WiFi network.
+const btnWifi = document.getElementById("btnWifi");
+const btnUsb = document.getElementById("btnUsb");
+const adbStatus = document.getElementById("adbStatus");
+
+btnWifi.addEventListener("click", async () => {
+  btnWifi.classList.add("active");
+  btnUsb.classList.remove("active", "warn");
+  adbStatus.textContent = "";
+  try {
+    await window.pitwall.adbReverseRemove();
+  } catch {
+    /* ignore — removing a tunnel that was never set up is harmless */
+  }
+});
+
+btnUsb.addEventListener("click", async () => {
+  adbStatus.textContent = "menghubungkan…";
+  const res = await window.pitwall.adbReverse();
+  if (res && res.ok) {
+    btnUsb.classList.add("active");
+    btnUsb.classList.remove("warn");
+    btnWifi.classList.remove("active");
+    adbStatus.textContent = "adb reverse aktif";
+  } else {
+    btnUsb.classList.add("warn");
+    btnUsb.classList.remove("active");
+    adbStatus.textContent = "gagal — cek USB debugging / adb di PATH";
+  }
+});
 
 const TOTAL_LEDS = 20;
 const rpmbar = document.getElementById("rpmbar");
@@ -285,6 +336,26 @@ function tyreColor(t) {
   return "#ff2b4d";
 }
 
+const TYRE_COMPOUND_NAME = {
+  15: "C0",
+  16: "C5",
+  17: "C4",
+  18: "C3",
+  19: "C2",
+  20: "C1",
+  7: "INTER",
+  8: "WET",
+};
+const FUEL_MIX_NAME = ["LEAN", "STANDARD", "RICH", "MAX"];
+
+function setKv(id, text, cls) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.classList.remove("on", "off", "warn");
+  if (cls) el.classList.add(cls);
+}
+
 const throttleHistory = [];
 const brakeHistory = [];
 const MAX_POINTS = 240; // ~60s at 4Hz
@@ -345,6 +416,28 @@ window.pitwall.on("telemetry", (d) => {
     document.getElementById("txtRR").textContent = "RR " + Math.round(rr) + "°";
   }
 
+  // brake temperatures (carTelemetry.m_brakesTemperature, order RL,RR,FL,FR)
+  if (typeof d.brakeTemp !== "undefined" && d.brakeTemp) {
+    const [rl, rr, fl, fr] = d.brakeTemp;
+    document.getElementById("txtBFL").textContent =
+      "FL " + Math.round(fl) + "°";
+    document.getElementById("txtBFR").textContent =
+      "FR " + Math.round(fr) + "°";
+    document.getElementById("txtBRL").textContent =
+      "RL " + Math.round(rl) + "°";
+    document.getElementById("txtBRR").textContent =
+      "RR " + Math.round(rr) + "°";
+  }
+
+  // tyre pressures (carTelemetry.m_tyresPressure, order RL,RR,FL,FR)
+  if (typeof d.tyrePressure !== "undefined" && d.tyrePressure) {
+    const [rl, rr, fl, fr] = d.tyrePressure;
+    document.getElementById("txtPFL").textContent = "FL " + fl.toFixed(1);
+    document.getElementById("txtPFR").textContent = "FR " + fr.toFixed(1);
+    document.getElementById("txtPRL").textContent = "RL " + rl.toFixed(1);
+    document.getElementById("txtPRR").textContent = "RR " + rr.toFixed(1);
+  }
+
   if (typeof d.ersMode !== "undefined") {
     const names = ["NONE", "MED", "HOTLAP", "OVERTAKE"];
     document.getElementById("ersMode").textContent = names[d.ersMode] || "NONE";
@@ -355,8 +448,59 @@ window.pitwall.on("telemetry", (d) => {
       0;
     document.getElementById("ersEnergy").textContent = pct + "%";
   }
+  if (typeof d.ersHarvestMGUK !== "undefined") {
+    setKv("ersHarvestK", (d.ersHarvestMGUK / 1000).toFixed(0) + " kJ");
+  }
+  if (typeof d.ersHarvestMGUH !== "undefined") {
+    setKv("ersHarvestH", (d.ersHarvestMGUH / 1000).toFixed(0) + " kJ");
+  }
   if (typeof d.fuel !== "undefined") {
     document.getElementById("fuelVal").textContent = d.fuel.toFixed(1) + " KG";
+  }
+  if (typeof d.fuelRemainingLaps !== "undefined") {
+    const low = d.fuelRemainingLaps < 1;
+    setKv(
+      "fuelLapsVal",
+      (d.fuelRemainingLaps >= 0 ? "+" : "") + d.fuelRemainingLaps.toFixed(2),
+      low ? "warn" : null,
+    );
+  }
+  if (typeof d.fuelMix !== "undefined") {
+    setKv("fuelMixVal", FUEL_MIX_NAME[d.fuelMix] || "—");
+  }
+  if (typeof d.tyreCompound !== "undefined") {
+    setKv("tyreCompoundVal", TYRE_COMPOUND_NAME[d.tyreCompound] || "—");
+  }
+  if (typeof d.tyreAge !== "undefined") {
+    setKv("tyreAgeVal", d.tyreAge + " lap");
+  }
+  if (typeof d.brakeBias !== "undefined") {
+    setKv("brakeBiasVal", d.brakeBias + "% / " + (100 - d.brakeBias) + "%");
+  }
+  if (typeof d.tractionControl !== "undefined") {
+    setKv(
+      "tcVal",
+      d.tractionControl === 0
+        ? "OFF"
+        : d.tractionControl === 1
+          ? "MEDIUM"
+          : "FULL",
+      d.tractionControl === 0 ? "off" : "on",
+    );
+  }
+  if (typeof d.absEnabled !== "undefined") {
+    setKv(
+      "absVal",
+      d.absEnabled ? "AKTIF" : "NONAKTIF",
+      d.absEnabled ? "on" : "off",
+    );
+  }
+  if (typeof d.pitLimiter !== "undefined") {
+    setKv(
+      "pitLimiterVal",
+      d.pitLimiter ? "AKTIF" : "OFF",
+      d.pitLimiter ? "warn" : "off",
+    );
   }
   if (typeof d.delta !== "undefined") {
     const el = document.getElementById("deltaval");
@@ -365,9 +509,26 @@ window.pitwall.on("telemetry", (d) => {
     el.classList.remove("neg", "pos");
     el.classList.add(val < 0 ? "neg" : "pos");
   }
+
+  // g-force mini gauge (motion.m_gForceLateral / m_gForceLongitudinal)
+  if (
+    typeof d.gForceLat !== "undefined" ||
+    typeof d.gForceLon !== "undefined"
+  ) {
+    const lat = d.gForceLat ?? 0;
+    const lon = d.gForceLon ?? 0;
+    const MAXG = 5; // clamp range for the little gauge
+    const nx = Math.max(-1, Math.min(1, lat / MAXG));
+    const ny = Math.max(-1, Math.min(1, -lon / MAXG)); // braking (negative lon) shown as "up"
+    const dot = document.getElementById("gforceDot");
+    dot.style.left = 50 + nx * 45 + "%";
+    dot.style.top = 50 + ny * 45 + "%";
+    document.getElementById("gLatVal").textContent = Math.abs(lat).toFixed(1);
+    document.getElementById("gLonVal").textContent = Math.abs(lon).toFixed(1);
+  }
 });
 
-// ---- throttle/brake trace (replaces the old speed-only oscilloscope) ----
+// ---- throttle/brake trace ----
 const canvas = document.getElementById("chart");
 const ctx = canvas.getContext("2d");
 
