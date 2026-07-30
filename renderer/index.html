@@ -9,8 +9,8 @@
     --panel:#0c0c0c;
     --panel-2:#121212;
     --panel-3:#080808;
-    --line:#262626;
-    --line-soft:#191919;
+    --line:#000000;
+    --line-soft:#820b1f;
     --text:#d4d4d4;
     --text-dim:#6e6e6e;
     --text-mid:#9a9a9a;
@@ -160,7 +160,7 @@
 
   #gearblock{ grid-column:1; }
   #gearblock .bd{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; overflow:hidden; padding:4px;}
-  #gearval{ font-size:clamp(42px, 9.5vh, 110px); font-weight:800; line-height:1; color:var(--cyan); font-family:var(--cond);}
+  #gearval{ font-size:clamp(42px, 9.5vh, 110px); font-weight:800; line-height:1; color:var(--yellow); font-family:var(--cond);}
   #gearval.redline{ color:var(--red); }
   #speedval{ font-size:clamp(17px, 2.6vh, 26px); color:var(--text); letter-spacing:.03em;}
   #speedval span{ font-size:11px; color:var(--text-dim); margin-left:5px;}
@@ -196,17 +196,38 @@
   #rpmnum{ margin-left:12px; font-size:clamp(12px,1.6vh,16px); color:var(--text-dim); width:80px; text-align:right; }
   #chartpanel{ flex:1; min-height:0; }
   #chartpanel .bd{ padding:5px; overflow:hidden; }
-  canvas{ width:100%; height:100%; display:block; }
 
-  /* chart mode tabs (T/B, speed, rpm, lap-time trend) */
-  #chartTabs{ display:flex; gap:2px; }
-  .chartTab{
-    background:var(--panel-2); border:1px solid var(--line); color:var(--text-dim);
-    font-family:var(--cond); font-weight:700; letter-spacing:.06em; text-transform:uppercase;
-    font-size:8.5px; padding:2px 6px; border-radius:2px; cursor:pointer;
+  /* ---- 2x2 grid of small-multiple telemetry charts (replaces the old
+     single tabbed chart) so every trace is visible at once, each with a
+     live numeric readout in its own header. ---- */
+  #chartsGrid{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap:5px;
+    width:100%; height:100%;
   }
-  .chartTab:hover{ color:var(--text); }
-  .chartTab.active{ color:var(--cyan); border-color:var(--cyan); background:rgba(0,212,255,0.1); }
+  .chart-cell{
+    display:flex; flex-direction:column; min-height:0; min-width:0;
+    background:var(--panel-3); border:1px solid var(--line-soft); border-radius:2px;
+    padding:4px 7px 6px;
+  }
+  .chart-cell-hd{
+    display:flex; justify-content:space-between; align-items:baseline; flex:none;
+    font-family:var(--cond); font-size:9px; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--text-dim); margin-bottom:3px;
+  }
+  .chart-cell-val{
+    font-family:var(--mono); font-size:11px; font-weight:700; letter-spacing:0;
+    text-transform:none; color:var(--text);
+  }
+  .chart-cell canvas{ flex:1; min-height:0; width:100%; height:100%; display:block; }
+
+  /* on the Telemetry page the whole thing gets more room, so bump the
+     small-multiple charts up in size/legibility too */
+  #app[data-page="telemetry"] .chart-cell-hd{ font-size:11.5px; }
+  #app[data-page="telemetry"] .chart-cell-val{ font-size:14px; }
+  #app[data-page="telemetry"] #chartsGrid{ gap:8px; }
 
   #tyresrscol{ grid-column:3; display:flex; flex-direction:column; gap:1px; background:var(--line); min-height:0;}
   #tyresrscol .panel{ border:none; }
@@ -268,7 +289,8 @@
   .col-resizer:hover, .col-resizer.dragging{ background:rgba(0,212,255,0.08); }
 
   ::-webkit-scrollbar{ width:6px; height:6px; }
-  ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:3px; }
+  ::-webkit-scrollbar-thumb{ background:var(--red); border-radius:3px; opacity:.7; }
+  ::-webkit-scrollbar-thumb:hover{ background:#ff5470; }
   ::-webkit-scrollbar-track{ background:var(--panel); }
 
   /* =========================================================
@@ -392,16 +414,39 @@
           </div>
         </div>
         <div class="panel" id="chartpanel">
-          <div class="hd">
-            <span>TELEMETRI</span>
-            <div id="chartTabs">
-              <button class="chartTab active" data-mode="tb" title="Gas / Rem">T/B</button>
-              <button class="chartTab" data-mode="speed" title="Kecepatan">SPD</button>
-              <button class="chartTab" data-mode="rpm" title="RPM">RPM</button>
-              <button class="chartTab" data-mode="lap" title="Tren waktu lap">LAP</button>
+          <div class="hd"><span>TELEMETRI</span></div>
+          <div class="bd">
+            <div id="chartsGrid">
+              <div class="chart-cell" id="cellTB">
+                <div class="chart-cell-hd">
+                  <span>Gas / Rem</span>
+                  <span class="chart-cell-val" id="valTB">G 0% · R 0%</span>
+                </div>
+                <canvas id="chartTB"></canvas>
+              </div>
+              <div class="chart-cell" id="cellSpeed">
+                <div class="chart-cell-hd">
+                  <span>Kecepatan</span>
+                  <span class="chart-cell-val" id="valSpeed">0 KM/H</span>
+                </div>
+                <canvas id="chartSpeed"></canvas>
+              </div>
+              <div class="chart-cell" id="cellRpm">
+                <div class="chart-cell-hd">
+                  <span>RPM</span>
+                  <span class="chart-cell-val" id="valRpm">0</span>
+                </div>
+                <canvas id="chartRpm"></canvas>
+              </div>
+              <div class="chart-cell" id="cellLap">
+                <div class="chart-cell-hd">
+                  <span>Tren Waktu Lap</span>
+                  <span class="chart-cell-val" id="valLap">—</span>
+                </div>
+                <canvas id="chartLap"></canvas>
+              </div>
             </div>
           </div>
-          <div class="bd"><canvas id="chart"></canvas></div>
         </div>
       </div>
 

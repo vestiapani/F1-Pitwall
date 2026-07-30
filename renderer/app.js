@@ -24,6 +24,7 @@ document.querySelectorAll(".navbtn").forEach((btn) => {
       if (el) el.style.gridTemplateColumns = "";
     });
     setTimeout(layoutAllResizers, 50);
+    setTimeout(resizeAllCharts, 60); // chart cells reflow with the page too
   });
 });
 
@@ -97,6 +98,14 @@ function fmtGap(ms) {
 function fmtGapMetres(m) {
   if (m === null || m === undefined || Number.isNaN(m) || m === 0) return "—";
   return (m >= 0 ? "+" : "") + Math.round(m) + "m";
+}
+// compact one-decimal lap time for the narrow chart y-axis gutter, e.g. "1:23.4"
+function fmtMsAxis(ms) {
+  if (ms === null || ms === undefined || Number.isNaN(ms)) return "—";
+  const abs = Math.abs(ms);
+  const m = Math.floor(abs / 60000);
+  const s = ((abs % 60000) / 1000).toFixed(1).padStart(4, "0");
+  return m > 0 ? `${m}:${s}` : `${(abs / 1000).toFixed(1)}`;
 }
 // sector time colour: purple = session-fastest, green = personal-best improvement,
 // red = not an improvement (set by main.js, see classifySector)
@@ -376,12 +385,13 @@ window.pitwall.on("leaderboard", (rows) => {
     const totalLaps = counter.textContent.split("/")[1] || "?";
     counter.textContent = `L${me.lapNum ?? "?"}/${totalLaps}`;
 
-    // feed the LAP chart mode: one bar per completed lap of the player's own race
+    // feed the LAP chart: one point per completed lap of the player's own race
     if (me.lastLapMs && me.lastLapMs !== lastSeenLapMs) {
       lastSeenLapMs = me.lastLapMs;
       lapTimesHistory.push(me.lastLapMs);
       if (lapTimesHistory.length > 30) lapTimesHistory.shift();
-      if (chartMode === "lap") drawChart();
+      document.getElementById("valLap").textContent = fmtMs(me.lastLapMs);
+      drawLap();
     }
   }
 });
@@ -503,15 +513,22 @@ window.pitwall.on("telemetry", (d) => {
       Math.round(d.speed) + "<span>KM/H</span>";
     speedHistory.push(d.speed);
     if (speedHistory.length > MAX_POINTS) speedHistory.shift();
-    if (chartMode === "speed") drawChart();
+    document.getElementById("valSpeed").textContent =
+      Math.round(d.speed) + " KM/H";
+    drawSpeed();
   }
 
   if (typeof d.throttle !== "undefined" || typeof d.brake !== "undefined") {
-    throttleHistory.push(d.throttle ?? 0);
-    brakeHistory.push(d.brake ?? 0);
+    const throttle =
+      d.throttle ?? throttleHistory[throttleHistory.length - 1] ?? 0;
+    const brake = d.brake ?? brakeHistory[brakeHistory.length - 1] ?? 0;
+    throttleHistory.push(throttle);
+    brakeHistory.push(brake);
     if (throttleHistory.length > MAX_POINTS) throttleHistory.shift();
     if (brakeHistory.length > MAX_POINTS) brakeHistory.shift();
-    if (chartMode === "tb") drawChart();
+    document.getElementById("valTB").textContent =
+      `G ${Math.round(throttle * 100)}% · R ${Math.round(brake * 100)}%`;
+    drawTB();
   }
 
   if (typeof d.rpm !== "undefined") {
@@ -534,7 +551,9 @@ window.pitwall.on("telemetry", (d) => {
 
     rpmHistory.push(d.rpm);
     if (rpmHistory.length > MAX_POINTS) rpmHistory.shift();
-    if (chartMode === "rpm") drawChart();
+    document.getElementById("valRpm").textContent =
+      Math.round(d.rpm) + " (" + pct + "%)";
+    drawRpm();
   }
 
   if (typeof d.drs !== "undefined") {
@@ -665,67 +684,44 @@ window.pitwall.on("telemetry", (d) => {
   }
 });
 
-// ---- telemetry chart: throttle/brake, speed, RPM, or lap-time trend ----
-const canvas = document.getElementById("chart");
-const ctx = canvas.getContext("2d");
-let chartMode = "tb";
+// ---------------------------------------------------------------------------
+// ---- telemetry charts: 4 always-visible small multiples ----
+// Gas/Rem, Speed, RPM and Lap-time trend each get their own canvas + a live
+// numeric readout in the header (see #chartsGrid in index.html), so nothing
+// needs tab-switching and every trace is legible at a glance.
+// ---------------------------------------------------------------------------
+const chartTB = document.getElementById("chartTB");
+const ctxTB = chartTB.getContext("2d");
+const chartSpeed = document.getElementById("chartSpeed");
+const ctxSpeed = chartSpeed.getContext("2d");
+const chartRpm = document.getElementById("chartRpm");
+const ctxRpm = chartRpm.getContext("2d");
+const chartLap = document.getElementById("chartLap");
+const ctxLap = chartLap.getContext("2d");
 
-document.querySelectorAll(".chartTab").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    document
-      .querySelectorAll(".chartTab")
-      .forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-    chartMode = btn.dataset.mode;
-    drawChart();
+const ALL_CHARTS = [
+  { canvas: chartTB, ctx: ctxTB, draw: drawTB },
+  { canvas: chartSpeed, ctx: ctxSpeed, draw: drawSpeed },
+  { canvas: chartRpm, ctx: ctxRpm, draw: drawRpm },
+  { canvas: chartLap, ctx: ctxLap, draw: drawLap },
+];
+
+function resizeAllCharts() {
+  ALL_CHARTS.forEach(({ canvas }) => {
+    const r = canvas.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return; // hidden page, skip for now
+    canvas.width = r.width * devicePixelRatio;
+    canvas.height = r.height * devicePixelRatio;
   });
+  ALL_CHARTS.forEach(({ draw }) => draw());
+}
+window.addEventListener("resize", () => {
+  clearTimeout(window._chartResizeT);
+  window._chartResizeT = setTimeout(resizeAllCharts, 120);
 });
+setTimeout(resizeAllCharts, 300); // once after first paint/layout settles
 
-function resizeCanvas() {
-  const r = canvas.getBoundingClientRect();
-  canvas.width = r.width * devicePixelRatio;
-  canvas.height = r.height * devicePixelRatio;
-  drawChart();
-}
-window.addEventListener("resize", resizeCanvas);
-resizeCanvas();
-
-function drawSeries(values, color, max) {
-  ctx.beginPath();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.6 * devicePixelRatio;
-  const n = values.length;
-  values.forEach((v, i) => {
-    const x = (i / (n - 1 || 1)) * canvas.width;
-    const y = canvas.height - (v / (max || 1)) * canvas.height * 0.92 - 3;
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-}
-
-// lap-time trend: one bar per completed lap, taller = faster, purple = session best
-function drawLapBars() {
-  const valid = lapTimesHistory.filter((v) => v);
-  if (!valid.length) return;
-  const min = Math.min(...valid);
-  const max = Math.max(...valid);
-  const range = max - min || 1;
-  const barW = canvas.width / lapTimesHistory.length;
-  lapTimesHistory.forEach((v, i) => {
-    if (!v) return;
-    const h = 0.12 + 0.86 * (1 - (v - min) / range); // faster lap -> taller bar
-    const barH = h * canvas.height * 0.92;
-    ctx.fillStyle = v === min ? "#b34dff" : "#3d7bfd";
-    ctx.fillRect(
-      i * barW + barW * 0.15,
-      canvas.height - barH,
-      barW * 0.7,
-      barH,
-    );
-  });
-}
-
-function drawChart() {
+function drawGrid(ctx, canvas) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.strokeStyle = "rgba(35,43,56,0.9)";
   ctx.lineWidth = 1;
@@ -736,23 +732,138 @@ function drawChart() {
     ctx.lineTo(canvas.width, y);
     ctx.stroke();
   }
+}
 
-  if (chartMode === "lap") {
-    drawLapBars();
+// Grid + a left-side value scale: draws 5 horizontal gridlines starting after
+// a reserved "gutter" on the left, and prints tickLabels[i] next to gridline i
+// (i=0 top … i=4 bottom) so you can read off what value/height any line sits
+// at — used by the Speed, RPM and Lap charts. Returns the gutter width (in
+// device px) so the caller knows where the plottable area starts.
+function drawAxisGrid(ctx, canvas, tickLabels) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const gutter = 36 * devicePixelRatio;
+
+  ctx.strokeStyle = "rgba(35,43,56,0.9)";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = (canvas.height / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(gutter, y);
+    ctx.lineTo(canvas.width, y);
+    ctx.stroke();
+  }
+
+  if (tickLabels) {
+    ctx.font = `${8.5 * devicePixelRatio}px "SFMono-Regular","Consolas","Roboto Mono",monospace`;
+    ctx.fillStyle = "#6e6e6e";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    tickLabels.forEach((label, i) => {
+      if (label === undefined || label === null) return;
+      const y = (canvas.height / 4) * i;
+      // nudge the top/bottom labels inward so they don't clip off-canvas
+      const ty =
+        i === 0
+          ? y + 7 * devicePixelRatio
+          : i === 4
+            ? y - 7 * devicePixelRatio
+            : y;
+      ctx.fillText(label, gutter - 6 * devicePixelRatio, ty);
+    });
+  }
+
+  return gutter;
+}
+
+function drawSeries(ctx, canvas, values, color, max, gutter = 0) {
+  if (values.length < 2) return;
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.6 * devicePixelRatio;
+  const n = values.length;
+  const plotW = canvas.width - gutter;
+  values.forEach((v, i) => {
+    const x = gutter + (i / (n - 1 || 1)) * plotW;
+    const y = canvas.height - (v / (max || 1)) * canvas.height * 0.88 - 4;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+}
+
+function drawTB() {
+  drawGrid(ctxTB, chartTB);
+  drawSeries(ctxTB, chartTB, throttleHistory, "#17e88f", 1);
+  drawSeries(ctxTB, chartTB, brakeHistory, "#ff2b4d", 1);
+}
+
+// Speed y-axis: top gridline = current max in view, bottom = 0 km/h.
+function drawSpeed() {
+  const max = Math.max(100, ...speedHistory, 1);
+  const ticks = [0, 1, 2, 3, 4].map((i) =>
+    String(Math.round((max * (4 - i)) / 4)),
+  );
+  const gutter = drawAxisGrid(ctxSpeed, chartSpeed, ticks);
+  drawSeries(ctxSpeed, chartSpeed, speedHistory, "#00d4ff", max, gutter);
+}
+
+// RPM y-axis: top gridline = car's max RPM (redline), bottom = 0.
+function drawRpm() {
+  const max = state.maxRpm || 1;
+  const ticks = [0, 1, 2, 3, 4].map((i) =>
+    String(Math.round((max * (4 - i)) / 4 / 100) * 100),
+  );
+  const gutter = drawAxisGrid(ctxRpm, chartRpm, ticks);
+  drawSeries(ctxRpm, chartRpm, rpmHistory, "#ff2b4d", max, gutter);
+}
+
+// Lap-time trend as a connected line, one point per completed lap: faster
+// lap sits higher on the chart, and the session-best point is highlighted
+// purple (mirrors the purple "session fastest" colour used elsewhere). The
+// y-axis gutter shows the actual lap time at each gridline (top = fastest
+// lap seen, bottom = slowest), so you can read off roughly how fast a point
+// is just from its height without hovering anything.
+function drawLap() {
+  const valid = lapTimesHistory.filter((v) => v);
+  if (!valid.length) {
+    drawAxisGrid(ctxLap, chartLap, ["—", "—", "—", "—", "—"]);
     return;
   }
-  if (chartMode === "speed") {
-    if (speedHistory.length < 2) return;
-    drawSeries(speedHistory, "#00d4ff", Math.max(100, ...speedHistory));
-    return;
+
+  const min = Math.min(...valid);
+  const max = Math.max(...valid);
+  const range = max - min || 1;
+  const ticks = [0, 1, 2, 3, 4].map((i) => fmtMsAxis(min + (i / 4) * range));
+  const gutter = drawAxisGrid(ctxLap, chartLap, ticks);
+
+  const plotW = chartLap.width - gutter;
+  const n = lapTimesHistory.length;
+  const pts = lapTimesHistory
+    .map((v, i) => {
+      if (!v) return null;
+      const x = gutter + (i / (n - 1 || 1)) * plotW;
+      // faster lap (smaller v) -> larger "transformed" value -> higher up,
+      // using the same 0.88/-4 mapping as drawSeries for a consistent feel
+      const transformed = max - v;
+      const y =
+        chartLap.height - (transformed / range) * chartLap.height * 0.88 - 4;
+      return { x, y, v };
+    })
+    .filter(Boolean);
+
+  if (pts.length >= 2) {
+    ctxLap.beginPath();
+    ctxLap.strokeStyle = "#3d7bfd";
+    ctxLap.lineWidth = 1.6 * devicePixelRatio;
+    pts.forEach((p, i) =>
+      i === 0 ? ctxLap.moveTo(p.x, p.y) : ctxLap.lineTo(p.x, p.y),
+    );
+    ctxLap.stroke();
   }
-  if (chartMode === "rpm") {
-    if (rpmHistory.length < 2) return;
-    drawSeries(rpmHistory, "#ff2b4d", state.maxRpm);
-    return;
-  }
-  // default: throttle / brake
-  if (throttleHistory.length < 2) return;
-  drawSeries(throttleHistory, "#17e88f", 1);
-  drawSeries(brakeHistory, "#ff2b4d", 1);
+
+  pts.forEach((p) => {
+    ctxLap.beginPath();
+    ctxLap.fillStyle = p.v === min ? "#b34dff" : "#3d7bfd";
+    ctxLap.arc(p.x, p.y, 2.6 * devicePixelRatio, 0, Math.PI * 2);
+    ctxLap.fill();
+  });
 }

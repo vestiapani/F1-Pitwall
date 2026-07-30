@@ -1,7 +1,8 @@
 {
   "name": "f1-pitwall",
   "version": "1.0.0",
-  "description": "F1 Remote — Pitwall Control Panel (Electron)",
+  "description": "F1 Remote — Pitwall Control Panel",
+  "author": "VestiaPani <ivan131335@gmail.com>",
   "main": "main.js",
   "private": true,
   "scripts": {
@@ -20,9 +21,17 @@
   "build": {
     "appId": "com.vestiapani.f1pitwall",
     "productName": "F1 Pitwall",
-    "files": ["main.js", "preload.js", "renderer/**/*", "package.json"],
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "package.json"
+    ],
     "win": {
-      "target": ["nsis", "portable"]
+      "target": [
+        "nsis",
+        "portable"
+      ]
     },
     "nsis": {
       "oneClick": false,
