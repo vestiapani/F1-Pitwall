@@ -535,20 +535,32 @@ window.pitwall.on("telemetry", (d) => {
     const pct = Math.min(100, Math.round((d.rpm / state.maxRpm) * 100));
     document.getElementById("rpmPct").textContent = pct + "%";
     document.getElementById("rpmnum").textContent = Math.round(d.rpm);
-    const lit = Math.round((pct / 100) * TOTAL_LEDS);
+
+    // --- FIX SHIFTLIGHT F1 ---
+    // Mulai nyala di 74%, mentok di 95% (rentang 21)
+    let lit = 0;
+    if (pct >= 74) {
+      const fillRatio = Math.min(1, (pct - 74) / 21);
+      lit = Math.round(fillRatio * TOTAL_LEDS);
+    }
+
     leds.forEach((el, i) => {
-      let c = "#1a1f28";
+      let c = "#1a1f28"; // Mati
       if (i < lit) {
-        if (i >= TOTAL_LEDS - 3) c = "#3d7bfd";
-        else if (i >= TOTAL_LEDS * 0.55) c = "#ff2b4d";
-        else c = "#17e88f";
+        // Hijaunya 5, sisanya Merah, Ungu, dan Biru tetap sama seperti kemarin
+        if (i >= 17)
+          c = "#3d7bfd"; // Biru ujung
+        else if (i >= 13)
+          c = "#b34dff"; // Ungu
+        else if (i >= 5)
+          c = "#ff2b4d"; // Merah
+        else c = "#17e88f"; // Hijau (cuma 5 bar)
       }
       el.style.background = c;
     });
-    document
-      .getElementById("gearval")
-      .classList.toggle("redline", lit >= TOTAL_LEDS - 3);
 
+    // Gear jadi merah kalau udah masuk area ungu
+    document.getElementById("gearval").classList.toggle("redline", lit >= 13);
     rpmHistory.push(d.rpm);
     if (rpmHistory.length > MAX_POINTS) rpmHistory.shift();
     document.getElementById("valRpm").textContent =
@@ -832,7 +844,9 @@ function drawLap() {
   const min = Math.min(...valid);
   const max = Math.max(...valid);
   const range = max - min || 1;
-  const ticks = [0, 1, 2, 3, 4].map((i) => fmtMsAxis(min + (i / 4) * range));
+
+  // Label dibalik: atas = lambat (max), bawah = cepat (min)
+  const ticks = [0, 1, 2, 3, 4].map((i) => fmtMsAxis(max - (i / 4) * range));
   const gutter = drawAxisGrid(ctxLap, chartLap, ticks);
 
   const plotW = chartLap.width - gutter;
@@ -841,11 +855,13 @@ function drawLap() {
     .map((v, i) => {
       if (!v) return null;
       const x = gutter + (i / (n - 1 || 1)) * plotW;
-      // faster lap (smaller v) -> larger "transformed" value -> higher up,
-      // using the same 0.88/-4 mapping as drawSeries for a consistent feel
-      const transformed = max - v;
+
+      // Lap lambat (v besar) posisinya di atas (y kecil)
+      // Lap cepat (v kecil) posisinya di bawah (y besar mendekati height)
+      const transformed = v - min;
       const y =
-        chartLap.height - (transformed / range) * chartLap.height * 0.88 - 4;
+        chartLap.height - 4 - (transformed / range) * chartLap.height * 0.88;
+
       return { x, y, v };
     })
     .filter(Boolean);

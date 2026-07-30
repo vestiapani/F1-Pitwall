@@ -112,8 +112,14 @@ function getLocalIP() {
 }
 
 function send(channel, payload) {
+  // 1. Kirim ke layar PC (Electron Renderer)
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload);
+  }
+
+  // 2. FIX: Broadcast juga ke HP (React Native) via socket.io
+  if (io) {
+    io.volatile.emit(channel, payload);
   }
 }
 
