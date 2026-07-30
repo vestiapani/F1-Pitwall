@@ -248,7 +248,7 @@ function startCoreServer() {
   // ---- own-car telemetry (gear/speed/rpm/throttle/brake/tyres + brake temps/pressures) ----
   f1.on(PACKETS.carTelemetry, (data) => {
     const now = Date.now();
-    if (now - lastCarTelemetryTime < 50) return;
+    if (now - lastCarTelemetryTime < 16) return;
     lastCarTelemetryTime = now;
     const idx = data.m_header.m_playerCarIndex;
     const p = data.m_carTelemetryData[idx];
@@ -605,6 +605,7 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false,
     },
   });
 
