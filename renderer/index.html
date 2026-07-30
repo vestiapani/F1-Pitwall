@@ -96,7 +96,7 @@
   /* ---------- main layout ---------- */
   #app{ flex:1; display:flex; flex-direction:column; min-height:0; gap:1px; background:var(--line); padding:1px; }
 
-  #zoneA{ display:grid; grid-template-columns: 1fr clamp(320px, 30vw, 480px); gap:1px; background:var(--line); flex:1.7; min-height:0; }
+  #zoneA{ display:grid; grid-template-columns: 1fr clamp(320px, 30vw, 480px); gap:1px; background:var(--line); flex:1.7; min-height:0; position:relative; }
 
   .panel{
     background:var(--panel); border:1px solid var(--line);
@@ -128,6 +128,11 @@
   }
   .pit-badge{ font-size:9px; color:var(--red); border:1px solid var(--red); padding:0 4px; border-radius:2px; }
   .lb-num{ font-variant-numeric: tabular-nums; }
+  /* sector colouring: purple = fastest in session, green = personal-best improvement,
+     red = not an improvement over the driver's own best for that sector */
+  .s-purple{ color:var(--purple); font-weight:700; }
+  .s-green{ color:var(--green); }
+  .s-red{ color:var(--red); }
 
   /* track map */
   #mapPanel{ grid-column:2; grid-row:1; }
@@ -150,7 +155,7 @@
   #zoneB{
     display:grid;
     grid-template-columns: clamp(190px,17vw,260px) 1fr clamp(210px,19vw,280px) clamp(230px,20vw,300px);
-    gap:1px; background:var(--line); flex:1; min-height:0;
+    gap:1px; background:var(--line); flex:1; min-height:0; position:relative;
   }
 
   #gearblock{ grid-column:1; }
@@ -192,6 +197,16 @@
   #chartpanel{ flex:1; min-height:0; }
   #chartpanel .bd{ padding:5px; overflow:hidden; }
   canvas{ width:100%; height:100%; display:block; }
+
+  /* chart mode tabs (T/B, speed, rpm, lap-time trend) */
+  #chartTabs{ display:flex; gap:2px; }
+  .chartTab{
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text-dim);
+    font-family:var(--cond); font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    font-size:8.5px; padding:2px 6px; border-radius:2px; cursor:pointer;
+  }
+  .chartTab:hover{ color:var(--text); }
+  .chartTab.active{ color:var(--cyan); border-color:var(--cyan); background:rgba(0,212,255,0.1); }
 
   #tyresrscol{ grid-column:3; display:flex; flex-direction:column; gap:1px; background:var(--line); min-height:0;}
   #tyresrscol .panel{ border:none; }
@@ -239,6 +254,18 @@
   #penList li .pen-head{ display:flex; justify-content:space-between; color:var(--text); font-weight:600; }
   #penList li .pen-sub{ color:var(--text-dim); font-size:9.5px; }
   #penList .empty{ color:var(--text-dim); text-align:center; padding:14px 0; border:none; background:none; }
+
+  /* draggable column resizers (JS-positioned overlays between grid panels) */
+  .col-resizer{
+    position:absolute; top:0; bottom:0; width:9px; cursor:col-resize; z-index:6;
+    background:transparent;
+  }
+  .col-resizer::after{
+    content:""; position:absolute; left:50%; top:0; bottom:0; width:1px;
+    background:var(--line); transform:translateX(-50%);
+  }
+  .col-resizer:hover::after, .col-resizer.dragging::after{ background:var(--cyan); width:2px; }
+  .col-resizer:hover, .col-resizer.dragging{ background:rgba(0,212,255,0.08); }
 
   ::-webkit-scrollbar{ width:6px; height:6px; }
   ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:3px; }
@@ -315,11 +342,11 @@
             <thead>
               <tr>
                 <th>POS</th><th>DRIVER</th><th>GAP (M)</th><th>INT (M)</th>
-                <th>S1</th><th>S2</th><th>LAST</th><th>BEST</th><th>PEN</th>
+                <th>S1</th><th>S2</th><th>S3</th><th>LAST</th><th>BEST</th><th>PEN</th>
               </tr>
             </thead>
             <tbody id="lbBody">
-              <tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:18px;">Menunggu data sesi…</td></tr>
+              <tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:18px;">Menunggu data sesi…</td></tr>
             </tbody>
           </table>
         </div>
@@ -365,7 +392,15 @@
           </div>
         </div>
         <div class="panel" id="chartpanel">
-          <div class="hd">THROTTLE / BRAKE <span class="badge">LIVE</span></div>
+          <div class="hd">
+            <span>TELEMETRI</span>
+            <div id="chartTabs">
+              <button class="chartTab active" data-mode="tb" title="Gas / Rem">T/B</button>
+              <button class="chartTab" data-mode="speed" title="Kecepatan">SPD</button>
+              <button class="chartTab" data-mode="rpm" title="RPM">RPM</button>
+              <button class="chartTab" data-mode="lap" title="Tren waktu lap">LAP</button>
+            </div>
+          </div>
           <div class="bd"><canvas id="chart"></canvas></div>
         </div>
       </div>

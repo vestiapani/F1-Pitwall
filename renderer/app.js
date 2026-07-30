@@ -16,6 +16,14 @@ document.querySelectorAll(".navbtn").forEach((btn) => {
       .forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     appRoot.dataset.page = btn.dataset.page;
+    // Each page defines its own column count/widths in CSS (see index.html);
+    // drop any manual resize override so the new page's layout applies cleanly,
+    // then re-measure and re-drop the drag handles once the reflow settles.
+    RESIZABLE_GRIDS.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.style.gridTemplateColumns = "";
+    });
+    setTimeout(layoutAllResizers, 50);
   });
 });
 
@@ -90,6 +98,115 @@ function fmtGapMetres(m) {
   if (m === null || m === undefined || Number.isNaN(m) || m === 0) return "—";
   return (m >= 0 ? "+" : "") + Math.round(m) + "m";
 }
+// sector time colour: purple = session-fastest, green = personal-best improvement,
+// red = not an improvement (set by main.js, see classifySector)
+function sectorCls(cls) {
+  return cls ? ` s-${cls}` : "";
+}
+
+// ---------------------------------------------------------------------------
+// ---- resizable columns (drag dividers between grid panels) ----
+// Works generically over the two multi-column grids (#zoneA, #zoneB): measures
+// whichever direct-child columns are currently visible, drops a thin draggable
+// handle between each adjacent pair, and dragging adjusts just that pair of
+// tracks (converted to px) while leaving the others alone. Because Overview /
+// Telemetry / Timing each define a different column count via CSS, the inline
+// override is cleared on every page switch (see the navbtn handler above) so
+// the new page's own layout takes over before we re-measure.
+// ---------------------------------------------------------------------------
+const RESIZABLE_GRIDS = ["zoneA", "zoneB"];
+
+function visibleColumns(el) {
+  return [...el.children].filter(
+    (c) => !c.classList.contains("col-resizer") && c.offsetParent !== null,
+  );
+}
+
+function saveColWidths(gridId, page, widths) {
+  try {
+    localStorage.setItem(
+      `pitwall-cols-${gridId}-${page}`,
+      JSON.stringify(widths),
+    );
+  } catch {
+    /* storage unavailable — resizing still works, just won't persist */
+  }
+}
+function loadColWidths(gridId, page, count) {
+  try {
+    const raw = localStorage.getItem(`pitwall-cols-${gridId}-${page}`);
+    if (!raw) return null;
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr) && arr.length === count) return arr;
+  } catch {
+    /* ignore malformed/unavailable storage */
+  }
+  return null;
+}
+
+function layoutResizers(gridId) {
+  const grid = document.getElementById(gridId);
+  if (!grid) return;
+  grid.querySelectorAll(".col-resizer").forEach((r) => r.remove());
+
+  const cols = visibleColumns(grid);
+  if (cols.length < 2) return;
+
+  const page = appRoot.dataset.page;
+  const saved = loadColWidths(gridId, page, cols.length);
+  if (saved) {
+    grid.style.gridTemplateColumns = saved.map((w) => w + "px").join(" ");
+  }
+
+  const gridRect = grid.getBoundingClientRect();
+  cols.slice(0, -1).forEach((col, i) => {
+    const rect = col.getBoundingClientRect();
+    const x = rect.right - gridRect.left;
+    const handle = document.createElement("div");
+    handle.className = "col-resizer";
+    handle.style.left = x - 4 + "px";
+    grid.appendChild(handle);
+
+    handle.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      handle.classList.add("dragging");
+      const startWidths = getComputedStyle(grid)
+        .gridTemplateColumns.split(" ")
+        .map((v) => parseFloat(v));
+      const startX = e.clientX;
+
+      function onMove(ev) {
+        const delta = ev.clientX - startX;
+        const widths = [...startWidths];
+        widths[i] = Math.max(80, startWidths[i] + delta);
+        widths[i + 1] = Math.max(80, startWidths[i + 1] - delta);
+        grid.style.gridTemplateColumns = widths.map((w) => w + "px").join(" ");
+      }
+      function onUp() {
+        handle.classList.remove("dragging");
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        const finalWidths = getComputedStyle(grid)
+          .gridTemplateColumns.split(" ")
+          .map((v) => parseFloat(v));
+        saveColWidths(gridId, appRoot.dataset.page, finalWidths);
+        layoutResizers(gridId); // re-drop handles at their new boundaries
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+  });
+}
+
+function layoutAllResizers() {
+  RESIZABLE_GRIDS.forEach(layoutResizers);
+}
+
+window.addEventListener("resize", () => {
+  clearTimeout(window._resizeT);
+  window._resizeT = setTimeout(layoutAllResizers, 120);
+});
+setTimeout(layoutAllResizers, 300); // once after first paint/layout settles
 
 // ---- top strip / connection status ----
 window.pitwall.on("network-info", ({ ip, port }) => {
@@ -226,6 +343,7 @@ window.pitwall.on("penalties", (list) => {
 });
 
 // ---- leaderboard ----
+let lastSeenLapMs = null;
 window.pitwall.on("leaderboard", (rows) => {
   const body = document.getElementById("lbBody");
   if (!rows || !rows.length) return;
@@ -241,8 +359,9 @@ window.pitwall.on("leaderboard", (rows) => {
       <td><span class="teamtag" style="background:${r.color}">${r.tag}</span> ${r.name}${r.inPit ? ' <span class="pit-badge">PIT</span>' : ""}</td>
       <td class="lb-num">${fmtGapMetres(r.gapM)}</td>
       <td class="lb-num">${fmtGapMetres(r.intervalM)}</td>
-      <td class="lb-num">${r.s1Ms ? (r.s1Ms / 1000).toFixed(3) : "—"}</td>
-      <td class="lb-num">${r.s2Ms ? (r.s2Ms / 1000).toFixed(3) : "—"}</td>
+      <td class="lb-num${sectorCls(r.s1Cls)}">${r.s1Ms ? (r.s1Ms / 1000).toFixed(3) : "—"}</td>
+      <td class="lb-num${sectorCls(r.s2Cls)}">${r.s2Ms ? (r.s2Ms / 1000).toFixed(3) : "—"}</td>
+      <td class="lb-num${sectorCls(r.s3Cls)}">${r.s3Ms ? (r.s3Ms / 1000).toFixed(3) : "—"}</td>
       <td class="lb-num">${fmtMs(r.lastLapMs)}</td>
       <td class="lb-num" style="color:${isBestOverall ? "var(--purple)" : "var(--green)"}">${fmtMs(r.bestLapMs)}</td>
       <td class="lb-num">${r.penalties ? "+" + r.penalties + "s" : "—"}</td>
@@ -256,6 +375,14 @@ window.pitwall.on("leaderboard", (rows) => {
     const counter = document.getElementById("lapCounter");
     const totalLaps = counter.textContent.split("/")[1] || "?";
     counter.textContent = `L${me.lapNum ?? "?"}/${totalLaps}`;
+
+    // feed the LAP chart mode: one bar per completed lap of the player's own race
+    if (me.lastLapMs && me.lastLapMs !== lastSeenLapMs) {
+      lastSeenLapMs = me.lastLapMs;
+      lapTimesHistory.push(me.lastLapMs);
+      if (lapTimesHistory.length > 30) lapTimesHistory.shift();
+      if (chartMode === "lap") drawChart();
+    }
   }
 });
 
@@ -358,6 +485,9 @@ function setKv(id, text, cls) {
 
 const throttleHistory = [];
 const brakeHistory = [];
+const speedHistory = [];
+const rpmHistory = [];
+const lapTimesHistory = []; // completed player lap times (ms), fed from the leaderboard event
 const MAX_POINTS = 240; // ~60s at 4Hz
 
 window.pitwall.on("telemetry", (d) => {
@@ -371,6 +501,9 @@ window.pitwall.on("telemetry", (d) => {
   if (typeof d.speed !== "undefined") {
     document.getElementById("speedval").innerHTML =
       Math.round(d.speed) + "<span>KM/H</span>";
+    speedHistory.push(d.speed);
+    if (speedHistory.length > MAX_POINTS) speedHistory.shift();
+    if (chartMode === "speed") drawChart();
   }
 
   if (typeof d.throttle !== "undefined" || typeof d.brake !== "undefined") {
@@ -378,7 +511,7 @@ window.pitwall.on("telemetry", (d) => {
     brakeHistory.push(d.brake ?? 0);
     if (throttleHistory.length > MAX_POINTS) throttleHistory.shift();
     if (brakeHistory.length > MAX_POINTS) brakeHistory.shift();
-    drawChart();
+    if (chartMode === "tb") drawChart();
   }
 
   if (typeof d.rpm !== "undefined") {
@@ -398,6 +531,10 @@ window.pitwall.on("telemetry", (d) => {
     document
       .getElementById("gearval")
       .classList.toggle("redline", lit >= TOTAL_LEDS - 3);
+
+    rpmHistory.push(d.rpm);
+    if (rpmHistory.length > MAX_POINTS) rpmHistory.shift();
+    if (chartMode === "rpm") drawChart();
   }
 
   if (typeof d.drs !== "undefined") {
@@ -528,14 +665,27 @@ window.pitwall.on("telemetry", (d) => {
   }
 });
 
-// ---- throttle/brake trace ----
+// ---- telemetry chart: throttle/brake, speed, RPM, or lap-time trend ----
 const canvas = document.getElementById("chart");
 const ctx = canvas.getContext("2d");
+let chartMode = "tb";
+
+document.querySelectorAll(".chartTab").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document
+      .querySelectorAll(".chartTab")
+      .forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    chartMode = btn.dataset.mode;
+    drawChart();
+  });
+});
 
 function resizeCanvas() {
   const r = canvas.getBoundingClientRect();
   canvas.width = r.width * devicePixelRatio;
   canvas.height = r.height * devicePixelRatio;
+  drawChart();
 }
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
@@ -544,12 +694,35 @@ function drawSeries(values, color, max) {
   ctx.beginPath();
   ctx.strokeStyle = color;
   ctx.lineWidth = 1.6 * devicePixelRatio;
+  const n = values.length;
   values.forEach((v, i) => {
-    const x = (i / (MAX_POINTS - 1)) * canvas.width;
-    const y = canvas.height - (v / max) * canvas.height * 0.92 - 3;
+    const x = (i / (n - 1 || 1)) * canvas.width;
+    const y = canvas.height - (v / (max || 1)) * canvas.height * 0.92 - 3;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
   ctx.stroke();
+}
+
+// lap-time trend: one bar per completed lap, taller = faster, purple = session best
+function drawLapBars() {
+  const valid = lapTimesHistory.filter((v) => v);
+  if (!valid.length) return;
+  const min = Math.min(...valid);
+  const max = Math.max(...valid);
+  const range = max - min || 1;
+  const barW = canvas.width / lapTimesHistory.length;
+  lapTimesHistory.forEach((v, i) => {
+    if (!v) return;
+    const h = 0.12 + 0.86 * (1 - (v - min) / range); // faster lap -> taller bar
+    const barH = h * canvas.height * 0.92;
+    ctx.fillStyle = v === min ? "#b34dff" : "#3d7bfd";
+    ctx.fillRect(
+      i * barW + barW * 0.15,
+      canvas.height - barH,
+      barW * 0.7,
+      barH,
+    );
+  });
 }
 
 function drawChart() {
@@ -563,6 +736,22 @@ function drawChart() {
     ctx.lineTo(canvas.width, y);
     ctx.stroke();
   }
+
+  if (chartMode === "lap") {
+    drawLapBars();
+    return;
+  }
+  if (chartMode === "speed") {
+    if (speedHistory.length < 2) return;
+    drawSeries(speedHistory, "#00d4ff", Math.max(100, ...speedHistory));
+    return;
+  }
+  if (chartMode === "rpm") {
+    if (rpmHistory.length < 2) return;
+    drawSeries(rpmHistory, "#ff2b4d", state.maxRpm);
+    return;
+  }
+  // default: throttle / brake
   if (throttleHistory.length < 2) return;
   drawSeries(throttleHistory, "#17e88f", 1);
   drawSeries(brakeHistory, "#ff2b4d", 1);

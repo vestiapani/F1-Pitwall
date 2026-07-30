@@ -93,6 +93,8 @@ const session = {
   penalties: [], // recent penalty events, newest first
   trackTrace: [], // [{x,z}] normalized outline points, built live
   carPositions: [], // [{idx, x, z, isPlayer}] latest world pos per car
+  driverSectors: {}, // idx -> per-driver sector tracking state (see lapData handler)
+  bestSectors: { 1: null, 2: null, 3: null }, // session-wide fastest sector times (ms)
 };
 
 let traceLapIndex = -1; // which car we're currently tracing (first seen crossing s/f cleanly)
@@ -113,6 +115,37 @@ function send(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload);
   }
+}
+
+// Judge one driver's sector reading against their own personal best and the
+// session-wide best for that sector, returning { value, cls }. `cls` is one of
+// "purple" (fastest in the whole session), "green" (a new personal best that
+// isn't the overall fastest), "red" (not an improvement), or null (no reading
+// yet). Sector readings are HELD by the game for the whole lap once set, so we
+// only re-judge when the value actually changes — otherwise the same reading
+// would get re-compared against the personal best it just set and flip to red.
+function classifySector(ds, sector, value) {
+  if (!value) return ds.sectors[sector] || { value: null, cls: null };
+  const stored = ds.sectors[sector];
+  if (stored && stored.value === value) return stored;
+
+  let cls;
+  const prevPb = ds.pb[sector];
+  if (prevPb == null || value < prevPb) {
+    ds.pb[sector] = value;
+    cls = "green";
+  } else {
+    cls = "red";
+  }
+  const prevGlobal = session.bestSectors[sector];
+  if (prevGlobal == null || value < prevGlobal) {
+    session.bestSectors[sector] = value;
+  }
+  if (session.bestSectors[sector] === value) cls = "purple";
+
+  const result = { value, cls };
+  ds.sectors[sector] = result;
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -284,6 +317,12 @@ function startCoreServer() {
   // We convert lap/best times to ms for consistent formatting, and derive gap/interval
   // ourselves from m_totalDistance (works while the field is green-flag racing at speed;
   // it's an approximation, not a true time delta, since 2020 doesn't broadcast one).
+  //
+  // Sector 3 isn't a native field either: LapData only exposes sector1/sector2 for the
+  // CURRENT lap (held at their final value until the next lap resets them to 0). We snapshot
+  // each driver's last-seen s1/s2 right before their lap number increments, then derive
+  // sector3 = lastLapTime - s1 - s2 for the lap that just ended. This is an approximation
+  // bound by our 200ms poll rate, same spirit as the gap/interval approximation above.
   f1.on(PACKETS.lapData, (data) => {
     const now = Date.now();
     if (now - lastLapDataTime < 200) return;
@@ -296,6 +335,39 @@ function startCoreServer() {
           tag: "—",
           color: "#5b6b80",
         };
+
+        const s1 = lap.m_sector1TimeInMS || null;
+        const s2 = lap.m_sector2TimeInMS || null;
+        const lapNum = lap.m_currentLapNum;
+        const lastLapMs = lap.m_lastLapTime
+          ? Math.round(lap.m_lastLapTime * 1000)
+          : null;
+
+        let ds = session.driverSectors[idx];
+        if (!ds) {
+          ds = session.driverSectors[idx] = {
+            lastLapNum: lapNum,
+            prevS1: s1,
+            prevS2: s2,
+            s3: null,
+            pb: { 1: null, 2: null, 3: null },
+            sectors: { 1: null, 2: null, 3: null },
+          };
+        }
+
+        // Lap just rolled over: the s1/s2 we were holding from the previous tick are
+        // (most likely) the completed lap's final sector times, pre-reset.
+        if (lapNum > ds.lastLapNum && ds.prevS1 && ds.prevS2 && lastLapMs) {
+          ds.s3 = lastLapMs - ds.prevS1 - ds.prevS2;
+        }
+        ds.lastLapNum = lapNum;
+        if (s1) ds.prevS1 = s1;
+        if (s2) ds.prevS2 = s2;
+
+        const S1 = classifySector(ds, 1, s1);
+        const S2 = classifySector(ds, 2, s2);
+        const S3 = classifySector(ds, 3, ds.s3);
+
         return {
           idx,
           name: drv.name,
@@ -303,16 +375,18 @@ function startCoreServer() {
           color: drv.color,
           isPlayer: idx === session.playerIndex,
           position: lap.m_carPosition,
-          lastLapMs: lap.m_lastLapTime
-            ? Math.round(lap.m_lastLapTime * 1000)
-            : null,
+          lastLapMs,
           bestLapMs: lap.m_bestLapTime
             ? Math.round(lap.m_bestLapTime * 1000)
             : null,
-          s1Ms: lap.m_sector1TimeInMS || null,
-          s2Ms: lap.m_sector2TimeInMS || null,
+          s1Ms: S1.value,
+          s1Cls: S1.cls,
+          s2Ms: S2.value,
+          s2Cls: S2.cls,
+          s3Ms: S3.value,
+          s3Cls: S3.cls,
           totalDistance: lap.m_totalDistance ?? null,
-          lapNum: lap.m_currentLapNum,
+          lapNum,
           pitStatus: lap.m_pitStatus, // 0 none, 1 pitting, 2 in pit area
           inPit: lap.m_pitStatus === 1 || lap.m_pitStatus === 2,
           penalties: lap.m_penalties || 0,
@@ -394,6 +468,8 @@ function startCoreServer() {
       session.trackTrace = [];
       traceStarted = false;
       traceBounds = null;
+      session.driverSectors = {};
+      session.bestSectors = { 1: null, 2: null, 3: null };
       send("track-trace", { points: [], complete: false });
     }
     session._lastTrackId = session.trackId;
