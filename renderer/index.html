@@ -303,9 +303,10 @@
   #app[data-page="telemetry"] #zoneA{ display:none; }
   #app[data-page="telemetry"] #zoneB{ flex:1; }
   #app[data-page="telemetry"] #flagpencol{ display:none; }
-  #app[data-page="telemetry"] #zoneB{
-    grid-template-columns: clamp(260px,22vw,380px) 1fr clamp(300px,26vw,420px);
-  }
+ #app[data-page="telemetry"] #zoneB{
+  grid-template-columns: 1fr clamp(320px,26vw,420px);
+}
+#app[data-page="telemetry"] #gearblock{ display:none; }
   #app[data-page="telemetry"] #gearval{ font-size:clamp(70px, 20vh, 220px); }
   #app[data-page="telemetry"] #speedval{ font-size:clamp(22px, 4.5vh, 40px); }
   #app[data-page="telemetry"] #deltaval{ font-size:clamp(16px, 2.6vh, 24px); }
@@ -319,8 +320,6 @@
   /* TIMING page: hide the car-telemetry zone (except keep flags/
      penalties visible), blow up leaderboard + track map. */
   #app[data-page="timing"] #zoneB{ flex:0 0 auto; }
-  #app[data-page="timing"] #gearblock,
-  #app[data-page="timing"] #centercol,
   #app[data-page="timing"] #tyresrscol{ display:none; }
   #app[data-page="timing"] #zoneB{ grid-template-columns: 1fr; height:34vh; }
   #app[data-page="timing"] #zoneA{ flex:1; grid-template-columns: 1fr clamp(420px, 38vw, 640px); }

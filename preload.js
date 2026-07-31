@@ -12,6 +12,7 @@ const CHANNELS = [
   "penalties",
   "track-trace",
   "car-positions",
+  "telemetry-status"
 ];
 
 contextBridge.exposeInMainWorld("pitwall", {

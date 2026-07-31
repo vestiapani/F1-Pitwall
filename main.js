@@ -96,6 +96,7 @@ const session = {
   driverSectors: {}, // idx -> per-driver sector tracking state (see lapData handler)
   bestSectors: { 1: null, 2: null, 3: null }, // session-wide fastest sector times (ms)
 };
+const lastSpeedByIdx = {};
 
 let traceLapIndex = -1; // which car we're currently tracing (first seen crossing s/f cleanly)
 let traceStarted = false;
@@ -113,14 +114,13 @@ function getLocalIP() {
 
 let lastPhoneEmit = {};
 
-function send(channel, payload) {
-  // 1. Kirim ke layar PC -> GAS TERUS 60FPS!
-  if (mainWindow && !mainWindow.isDestroyed()) {
+function send(channel, payload, hpChannels = []) {
+  if (mainWindow && !mainWindow.isDestroyed())
     mainWindow.webContents.send(channel, payload);
-  }
+  const PC_ONLY = new Set(["car-positions", "track-trace", "leaderboard"]);
 
   // 2. Broadcast ke HP (React Native) -> KITA THROTTLE BIAR SETIR GAK DELAY
-  if (io) {
+  if (io && !PC_ONLY.has(channel)) {
     const now = Date.now();
     if (channel === "telemetry" || channel === "car-positions") {
       if (!lastPhoneEmit[channel] || now - lastPhoneEmit[channel] >= 50) {
@@ -258,6 +258,9 @@ function startCoreServer() {
   // ---- own-car telemetry (gear/speed/rpm/throttle/brake/tyres + brake temps/pressures) ----
   f1.on(PACKETS.carTelemetry, (data) => {
     const now = Date.now();
+    data.m_carTelemetryData.forEach((p, idx) => {
+      lastSpeedByIdx[idx] = p.m_speed;
+    });
     if (now - lastCarTelemetryTime < 16) return;
     lastCarTelemetryTime = now;
     const idx = data.m_header.m_playerCarIndex;
@@ -284,22 +287,21 @@ function startCoreServer() {
     if (now - lastCarStatusTime < 500) return;
     lastCarStatusTime = now;
     const p = data.m_carStatusData[data.m_header.m_playerCarIndex];
-    send("telemetry", {
-      ersMode: p.m_ersDeployMode,
-      ersEnergy: p.m_ersStoreEnergy,
-      ersHarvestMGUK: p.m_ersHarvestedThisLapMGUK,
-      ersHarvestMGUH: p.m_ersHarvestedThisLapMGUH,
-      fuel: p.m_fuelInTank,
-      // extra: race-strategy relevant fields already in CarStatus but previously unused
-      fuelRemainingLaps: p.m_fuelRemainingLaps,
-      fuelMix: p.m_fuelMix,
-      brakeBias: p.m_frontBrakeBias,
-      tractionControl: p.m_tractionControl,
-      absEnabled: p.m_antiLockBrakes,
-      pitLimiter: p.m_pitLimiterStatus,
-      tyreCompound: p.m_visualTyreCompound,
-      tyreAge: p.m_tyresAgeLaps,
-    });
+     send("telemetry-status", {
+       ersMode: p.m_ersDeployMode,
+       ersEnergy: p.m_ersStoreEnergy,
+       ersHarvestMGUK: p.m_ersHarvestedThisLapMGUK,
+       ersHarvestMGUH: p.m_ersHarvestedThisLapMGUH,
+       fuel: p.m_fuelInTank,
+       fuelRemainingLaps: p.m_fuelRemainingLaps,
+       fuelMix: p.m_fuelMix,
+       brakeBias: p.m_frontBrakeBias,
+       tractionControl: p.m_tractionControl,
+       absEnabled: p.m_antiLockBrakes,
+       pitLimiter: p.m_pitLimiterStatus,
+       tyreCompound: p.m_visualTyreCompound,
+       tyreAge: p.m_tyresAgeLaps,
+     });
 
     // F1 2020-specific: per-car FIA flag shown to the player right now (own car),
     // distinct from the marshal-zone list which is track-wide. Useful as the
@@ -420,19 +422,30 @@ function startCoreServer() {
     // simple "metres behind" figure) since 2020 has no native time-delta field.
     const leaderDistance = rows[0] ? rows[0].totalDistance : null;
     rows.forEach((r, i) => {
-      r.gapM =
-        leaderDistance != null && r.totalDistance != null
-          ? leaderDistance - r.totalDistance
-          : null;
+      const speedMps = (lastSpeedByIdx[r.idx] || 0) / 3.6;
+      if (leaderDistance != null && r.totalDistance != null && speedMps > 1) {
+        const distDiff = leaderDistance - r.totalDistance;
+        r.gapS = distDiff / speedMps;
+      } else {
+        r.gapS = null;
+      }
       const ahead = rows[i - 1];
-      r.intervalM =
-        ahead && ahead.totalDistance != null && r.totalDistance != null
-          ? ahead.totalDistance - r.totalDistance
-          : null;
+      if (
+        ahead &&
+        ahead.totalDistance != null &&
+        r.totalDistance != null &&
+        speedMps > 1
+      ) {
+        r.intervalS = (ahead.totalDistance - r.totalDistance) / speedMps;
+      } else {
+        r.intervalS = null;
+      }
     });
 
     session.leaderboard = rows;
     send("leaderboard", rows);
+    const me = rows.find((r) => r.isPlayer);
+    if (me && io) io.volatile.emit("my-status", me);
   });
 
   // ---- session: track id, weather, marshal-zone flags, safety car ----

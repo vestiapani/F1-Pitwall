@@ -95,9 +95,9 @@ function fmtGap(ms) {
 }
 // F1 2020 has no native time-delta field in LapData, so gap/interval are derived from
 // m_totalDistance and shown in metres rather than seconds (see main.js for details).
-function fmtGapMetres(m) {
-  if (m === null || m === undefined || Number.isNaN(m) || m === 0) return "—";
-  return (m >= 0 ? "+" : "") + Math.round(m) + "m";
+function fmtGapS(s) {
+  if (s === null || s === undefined || Number.isNaN(s)) return "—";
+  return (s > 0 ? "+" : "") + s.toFixed(3);
 }
 // compact one-decimal lap time for the narrow chart y-axis gutter, e.g. "1:23.4"
 function fmtMsAxis(ms) {
@@ -366,8 +366,8 @@ window.pitwall.on("leaderboard", (rows) => {
     <tr class="${r.isPlayer ? "me" : ""} ${r.inPit ? "inpit" : ""}">
       <td class="pos lb-num">${r.position ?? "-"}</td>
       <td><span class="teamtag" style="background:${r.color}">${r.tag}</span> ${r.name}${r.inPit ? ' <span class="pit-badge">PIT</span>' : ""}</td>
-      <td class="lb-num">${fmtGapMetres(r.gapM)}</td>
-      <td class="lb-num">${fmtGapMetres(r.intervalM)}</td>
+      <td class="lb-num">${fmtGapS(r.gapS)}</td>
+      <td class="lb-num">${fmtGapS(r.gapS)}</td>
       <td class="lb-num${sectorCls(r.s1Cls)}">${r.s1Ms ? (r.s1Ms / 1000).toFixed(3) : "—"}</td>
       <td class="lb-num${sectorCls(r.s2Cls)}">${r.s2Ms ? (r.s2Ms / 1000).toFixed(3) : "—"}</td>
       <td class="lb-num${sectorCls(r.s3Cls)}">${r.s3Ms ? (r.s3Ms / 1000).toFixed(3) : "—"}</td>
