@@ -12,7 +12,8 @@ const CHANNELS = [
   "penalties",
   "track-trace",
   "car-positions",
-  "telemetry-status"
+  "telemetry-status",
+  "lap-complete",
 ];
 
 contextBridge.exposeInMainWorld("pitwall", {
@@ -22,4 +23,11 @@ contextBridge.exposeInMainWorld("pitwall", {
   },
   adbReverse: () => ipcRenderer.invoke("adb-reverse"),
   adbReverseRemove: () => ipcRenderer.invoke("adb-reverse-remove"),
+
+  // Runtime control of how often high-frequency channels reach the phone.
+  setPhoneThrottle: (ms) => ipcRenderer.invoke("set-phone-throttle", ms),
+  getPhoneThrottle: () => ipcRenderer.invoke("get-phone-throttle"),
+
+  // Per-lap telemetry history, for the "Bandingkan Lap" compare chart.
+  getLapHistory: () => ipcRenderer.invoke("get-lap-history"),
 });

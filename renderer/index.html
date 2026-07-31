@@ -78,6 +78,20 @@
   .modebtn.warn{ color:var(--red); border-color:var(--red); }
   #adbStatus{ font-size:9px; color:var(--text-dim); margin-left:2px; }
 
+  /* ---------- phone telemetry throttle control ---------- */
+  #throttleChip{ gap:6px; }
+  #throttleInput{
+    width:52px; background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    font-family:var(--mono); font-size:11px; padding:2px 4px; border-radius:2px;
+  }
+  #throttleApply{
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text-dim);
+    font-family:var(--cond); font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    font-size:9.5px; padding:3px 8px; border-radius:2px; cursor:pointer;
+  }
+  #throttleApply:hover{ color:var(--cyan); border-color:var(--cyan); }
+  #throttleStatus{ font-size:9px; color:var(--text-dim); }
+
   /* ---------- page nav ---------- */
   #pageNav{ margin-left:auto; display:flex; align-items:stretch; }
   .navbtn{
@@ -106,6 +120,7 @@
     font-family:var(--cond); font-size:10.5px; letter-spacing:.13em; text-transform:uppercase;
     color:var(--text-dim); padding:6px 10px; border-bottom:1px solid var(--line);
     display:flex; justify-content:space-between; align-items:center; flex:none;
+    gap:8px;
   }
   .panel > .bd{ padding:0; flex:1; min-height:0; overflow:auto; }
 
@@ -195,17 +210,15 @@
   .rpmled{ flex:1; background:#1a1f28; border-radius:2px; }
   #rpmnum{ margin-left:12px; font-size:clamp(12px,1.6vh,16px); color:var(--text-dim); width:80px; text-align:right; }
   #chartpanel{ flex:1; min-height:0; }
-  #chartpanel .bd{ padding:5px; overflow:hidden; }
+  #chartpanel .bd{ padding:5px; overflow:hidden; display:flex; flex-direction:column; gap:6px; }
 
-  /* ---- 2x2 grid of small-multiple telemetry charts (replaces the old
-     single tabbed chart) so every trace is visible at once, each with a
-     live numeric readout in its own header. ---- */
+  /* ---- 2x2 grid of small-multiple telemetry charts, showing live traces. ---- */
   #chartsGrid{
     display:grid;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr 1fr;
     gap:5px;
-    width:100%; height:100%;
+    width:100%; flex:1.4; min-height:0;
   }
   .chart-cell{
     display:flex; flex-direction:column; min-height:0; min-width:0;
@@ -222,6 +235,26 @@
     text-transform:none; color:var(--text);
   }
   .chart-cell canvas{ flex:1; min-height:0; width:100%; height:100%; display:block; }
+
+  /* ---- lap-time trend: horizontally scrollable so the full session history
+     stays readable instead of getting squeezed as more laps come in. ---- */
+  #cellLap .chart-cell-hd{ flex-wrap:wrap; row-gap:3px; }
+  #lapScrollWrap{ flex:1; min-height:0; overflow-x:auto; overflow-y:hidden; }
+  #chartLap{ height:100%; display:block; } /* width set in px via JS, scales with lap count */
+
+  /* ---- compare-lap panel: overlays two recorded laps' speed traces ---- */
+  #comparePanel{
+    flex:1; min-height:0;
+    background:var(--panel-3); border:1px solid var(--line-soft); border-radius:2px;
+    display:flex; flex-direction:column; padding:4px 7px 6px;
+  }
+  #comparePanel .chart-cell-hd{ flex-wrap:wrap; row-gap:4px; }
+  .compare-select{
+    background:var(--panel-2); color:var(--text); border:1px solid var(--line);
+    font-family:var(--mono); font-size:9.5px; padding:2px 4px; border-radius:2px; max-width:120px;
+  }
+  .compare-swatch{ display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:3px; }
+  #chartCompare{ flex:1; min-height:0; width:100%; display:block; }
 
   /* on the Telemetry page the whole thing gets more room, so bump the
      small-multiple charts up in size/legibility too */
@@ -345,6 +378,13 @@
       <button class="modebtn" id="btnUsb" type="button" title="Sambung via kabel USB (adb reverse tcp:3000)">USB</button>
       <span id="adbStatus"></span>
     </div>
+    <div class="tchip" id="throttleChip" title="Seberapa sering data telemetry/posisi mobil dikirim ke HP">
+      <span class="label">Throttle HP</span>
+      <input id="throttleInput" type="number" min="16" step="10" value="50" />
+      <span class="label">ms</span>
+      <button id="throttleApply" type="button">Set</button>
+      <span id="throttleStatus"></span>
+    </div>
     <div id="pageNav">
       <button class="navbtn active" data-page="overview">Overview</button>
       <button class="navbtn" data-page="telemetry">Telemetry</button>
@@ -439,11 +479,28 @@
               </div>
               <div class="chart-cell" id="cellLap">
                 <div class="chart-cell-hd">
-                  <span>Tren Waktu Lap</span>
+                  <span>Tren Waktu Lap (scroll →)</span>
                   <span class="chart-cell-val" id="valLap">—</span>
                 </div>
-                <canvas id="chartLap"></canvas>
+                <div id="lapScrollWrap"><canvas id="chartLap"></canvas></div>
               </div>
+            </div>
+
+            <div id="comparePanel">
+              <div class="chart-cell-hd">
+                <span>Bandingkan Lap — Kecepatan</span>
+                <span style="display:flex; align-items:center; gap:6px;">
+                  <label style="display:flex;align-items:center;gap:3px;">
+                    <span class="compare-swatch" style="background:var(--cyan);"></span>
+                    <select id="compareLapA" class="compare-select"><option value="">Lap A</option></select>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:3px;">
+                    <span class="compare-swatch" style="background:var(--purple);"></span>
+                    <select id="compareLapB" class="compare-select"><option value="">Lap B</option></select>
+                  </label>
+                </span>
+              </div>
+              <canvas id="chartCompare"></canvas>
             </div>
           </div>
         </div>

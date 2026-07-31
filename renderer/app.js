@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // PITWALL renderer — status chips, leaderboard, track map, flags/penalties,
-// own-car telemetry (gear/speed/rpm/tyres/throttle-brake trace), plus the
-// Overview / Telemetry / Timing page switcher.
+// own-car telemetry (gear/speed/rpm/tyres/throttle-brake trace), lap-by-lap
+// history + compare chart, plus the Overview / Telemetry / Timing page switcher.
 // ---------------------------------------------------------------------------
 
 // ---- page switcher ----
@@ -60,6 +60,35 @@ btnUsb.addEventListener("click", async () => {
     btnUsb.classList.add("warn");
     btnUsb.classList.remove("active");
     adbStatus.textContent = "gagal — cek USB debugging / adb di PATH";
+  }
+});
+
+// ---- phone telemetry throttle control ----
+const throttleInput = document.getElementById("throttleInput");
+const throttleApply = document.getElementById("throttleApply");
+const throttleStatus = document.getElementById("throttleStatus");
+
+async function initThrottle() {
+  try {
+    const ms = await window.pitwall.getPhoneThrottle();
+    if (ms) throttleInput.value = ms;
+  } catch {
+    /* keep the default shown in the input */
+  }
+}
+initThrottle();
+
+throttleApply.addEventListener("click", async () => {
+  const ms = parseInt(throttleInput.value, 10);
+  if (!Number.isFinite(ms) || ms < 16) {
+    throttleStatus.textContent = "min 16ms";
+    return;
+  }
+  const res = await window.pitwall.setPhoneThrottle(ms);
+  if (res && res.ok) {
+    throttleStatus.textContent = `aktif (${res.ms}ms)`;
+  } else {
+    throttleStatus.textContent = "gagal set";
   }
 });
 
@@ -706,10 +735,138 @@ window.pitwall.on("telemetry", (d) => {
 });
 
 // ---------------------------------------------------------------------------
-// ---- telemetry charts: 4 always-visible small multiples ----
+// ---- per-lap history + compare chart ----
+// main.js records a light sample stream (t, speed, rpm, throttle, brake) for
+// each completed player lap and pushes it here as "lap-complete". We keep the
+// full set in memory (also pre-populated from get-lap-history on load so a
+// renderer reload doesn't lose laps recorded earlier in the session), and let
+// the person pick any two recorded laps to overlay in the compare chart.
+// ---------------------------------------------------------------------------
+const lapHistoryMap = {}; // lapNum -> { lapNum, lapTimeMs, samples }
+const compareLapA = document.getElementById("compareLapA");
+const compareLapB = document.getElementById("compareLapB");
+
+function lapOptionLabel(entry) {
+  return `L${entry.lapNum} · ${fmtMs(entry.lapTimeMs)}`;
+}
+
+function refreshLapSelects() {
+  const laps = Object.values(lapHistoryMap).sort((a, b) => a.lapNum - b.lapNum);
+  [compareLapA, compareLapB].forEach((sel, idx) => {
+    const prevVal = sel.value;
+    const placeholder = idx === 0 ? "Lap A" : "Lap B";
+    sel.innerHTML = `<option value="">${placeholder}</option>`;
+    laps.forEach((entry) => {
+      const opt = document.createElement("option");
+      opt.value = String(entry.lapNum);
+      opt.textContent = lapOptionLabel(entry);
+      sel.appendChild(opt);
+    });
+    if (laps.some((l) => String(l.lapNum) === prevVal)) sel.value = prevVal;
+  });
+}
+
+function addLapToHistory(entry) {
+  if (!entry || !entry.lapNum) return;
+  lapHistoryMap[entry.lapNum] = entry;
+  refreshLapSelects();
+  drawCompare();
+}
+
+window.pitwall.on("lap-complete", (entry) => addLapToHistory(entry));
+
+// pre-populate from anything recorded before this renderer instance loaded
+if (window.pitwall.getLapHistory) {
+  window.pitwall
+    .getLapHistory()
+    .then((laps) => {
+      (laps || []).forEach(addLapToHistory);
+    })
+    .catch(() => {
+      /* main process not ready yet — live lap-complete events will still arrive */
+    });
+}
+
+compareLapA.addEventListener("change", drawCompare);
+compareLapB.addEventListener("change", drawCompare);
+
+const chartCompare = document.getElementById("chartCompare");
+const ctxCompare = chartCompare.getContext("2d");
+
+function drawCompareSeries(
+  ctx,
+  canvas,
+  samples,
+  color,
+  gutter,
+  maxT,
+  maxSpeed,
+) {
+  if (!samples || samples.length < 2) return;
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.6 * devicePixelRatio;
+  const plotW = canvas.width - gutter;
+  samples.forEach((s, i) => {
+    const x = gutter + (s.t / (maxT || 1)) * plotW;
+    const y =
+      canvas.height - (s.speed / (maxSpeed || 1)) * canvas.height * 0.9 - 4;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+}
+
+function drawCompare() {
+  const r = chartCompare.getBoundingClientRect();
+  if (r.width > 0 && r.height > 0) {
+    chartCompare.width = r.width * devicePixelRatio;
+    chartCompare.height = r.height * devicePixelRatio;
+  }
+
+  const a = lapHistoryMap[Number(compareLapA.value)];
+  const b = lapHistoryMap[Number(compareLapB.value)];
+  const maxT = Math.max(
+    a ? a.samples[a.samples.length - 1].t : 0,
+    b ? b.samples[b.samples.length - 1].t : 0,
+    1000,
+  );
+  const maxSpeed = Math.max(
+    a ? Math.max(...a.samples.map((s) => s.speed)) : 0,
+    b ? Math.max(...b.samples.map((s) => s.speed)) : 0,
+    100,
+  );
+  const ticks = [0, 1, 2, 3, 4].map((i) =>
+    String(Math.round((maxSpeed * (4 - i)) / 4)),
+  );
+  const gutter = drawAxisGrid(ctxCompare, chartCompare, ticks);
+
+  drawCompareSeries(
+    ctxCompare,
+    chartCompare,
+    a?.samples,
+    "#00d4ff",
+    gutter,
+    maxT,
+    maxSpeed,
+  );
+  drawCompareSeries(
+    ctxCompare,
+    chartCompare,
+    b?.samples,
+    "#b34dff",
+    gutter,
+    maxT,
+    maxSpeed,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ---- telemetry charts: 4 always-visible small multiples + lap trend + compare ----
 // Gas/Rem, Speed, RPM and Lap-time trend each get their own canvas + a live
 // numeric readout in the header (see #chartsGrid in index.html), so nothing
-// needs tab-switching and every trace is legible at a glance.
+// needs tab-switching and every trace is legible at a glance. The lap-trend
+// chart scrolls horizontally as more laps come in (see #lapScrollWrap), and
+// the compare panel overlays any two recorded laps' speed traces.
 // ---------------------------------------------------------------------------
 const chartTB = document.getElementById("chartTB");
 const ctxTB = chartTB.getContext("2d");
@@ -719,16 +876,27 @@ const chartRpm = document.getElementById("chartRpm");
 const ctxRpm = chartRpm.getContext("2d");
 const chartLap = document.getElementById("chartLap");
 const ctxLap = chartLap.getContext("2d");
+const lapScrollWrap = document.getElementById("lapScrollWrap");
 
 const ALL_CHARTS = [
   { canvas: chartTB, ctx: ctxTB, draw: drawTB },
   { canvas: chartSpeed, ctx: ctxSpeed, draw: drawSpeed },
   { canvas: chartRpm, ctx: ctxRpm, draw: drawRpm },
-  { canvas: chartLap, ctx: ctxLap, draw: drawLap },
+  { canvas: chartLap, ctx: ctxLap, draw: drawLap, ownWidth: true },
+  { canvas: chartCompare, ctx: ctxCompare, draw: drawCompare },
 ];
 
+const PX_PER_LAP = 46; // how much horizontal room each lap point gets in the scrollable trend chart
+
 function resizeAllCharts() {
-  ALL_CHARTS.forEach(({ canvas }) => {
+  ALL_CHARTS.forEach(({ canvas, ownWidth }) => {
+    if (ownWidth) {
+      // width is driven by lap count (see drawLap), only sync height here
+      const r = canvas.getBoundingClientRect();
+      if (r.height === 0) return;
+      canvas.height = r.height * devicePixelRatio;
+      return;
+    }
     const r = canvas.getBoundingClientRect();
     if (r.width === 0 || r.height === 0) return; // hidden page, skip for now
     canvas.width = r.width * devicePixelRatio;
@@ -758,8 +926,8 @@ function drawGrid(ctx, canvas) {
 // Grid + a left-side value scale: draws 5 horizontal gridlines starting after
 // a reserved "gutter" on the left, and prints tickLabels[i] next to gridline i
 // (i=0 top … i=4 bottom) so you can read off what value/height any line sits
-// at — used by the Speed, RPM and Lap charts. Returns the gutter width (in
-// device px) so the caller knows where the plottable area starts.
+// at — used by the Speed, RPM, Lap, and Compare charts. Returns the gutter
+// width (in device px) so the caller knows where the plottable area starts.
 function drawAxisGrid(ctx, canvas, tickLabels) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   const gutter = 36 * devicePixelRatio;
@@ -841,10 +1009,19 @@ function drawRpm() {
 // lap sits higher on the chart, and the session-best point is highlighted
 // purple (mirrors the purple "session fastest" colour used elsewhere). The
 // y-axis gutter shows the actual lap time at each gridline (top = fastest
-// lap seen, bottom = slowest), so you can read off roughly how fast a point
-// is just from its height without hovering anything.
+// lap seen, bottom = slowest). The canvas is made wider than its container
+// as more laps come in (PX_PER_LAP per point) and lives inside a horizontally
+// scrollable wrapper (#lapScrollWrap), so the full session stays readable
+// instead of getting squeezed together.
 function drawLap() {
   const valid = lapTimesHistory.filter((v) => v);
+
+  const wrapRect = lapScrollWrap.getBoundingClientRect();
+  const cssWidth = Math.max(wrapRect.width, valid.length * PX_PER_LAP);
+  chartLap.style.width = cssWidth + "px";
+  chartLap.width = cssWidth * devicePixelRatio;
+  chartLap.height = Math.max(1, wrapRect.height) * devicePixelRatio;
+
   if (!valid.length) {
     drawAxisGrid(ctxLap, chartLap, ["—", "—", "—", "—", "—"]);
     return;
@@ -891,4 +1068,7 @@ function drawLap() {
     ctxLap.arc(p.x, p.y, 2.6 * devicePixelRatio, 0, Math.PI * 2);
     ctxLap.fill();
   });
+
+  // keep the freshest lap in view as the trend scrolls off to the right
+  lapScrollWrap.scrollLeft = lapScrollWrap.scrollWidth;
 }

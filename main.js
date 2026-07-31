@@ -75,6 +75,12 @@ let io = null;
 let controller = null;
 let phoneConnected = false;
 
+// How often (ms) high-frequency channels ("telemetry", "car-positions") are
+// allowed to reach the phone over socket.io. Configurable at runtime from the
+// PC renderer (see the "Throttle HP" control in the top strip) via
+// window.pitwall.setPhoneThrottle(ms) -> IPC "set-phone-throttle".
+let phoneThrottleMs = 50;
+
 // ---------------------------------------------------------------------------
 // Session state, rebuilt continuously from UDP packets, pushed to renderer.
 // ---------------------------------------------------------------------------
@@ -95,8 +101,20 @@ const session = {
   carPositions: [], // [{idx, x, z, isPlayer}] latest world pos per car
   driverSectors: {}, // idx -> per-driver sector tracking state (see lapData handler)
   bestSectors: { 1: null, 2: null, 3: null }, // session-wide fastest sector times (ms)
+
+  // ---- per-lap telemetry recording (player only) ----
+  // currentLapSamples: samples being collected for the lap in progress.
+  // lapHistory: { [lapNum]: { lapNum, lapTimeMs, samples } } for completed laps,
+  // capped to the most recent MAX_LAP_HISTORY entries so memory stays bounded.
+  currentLapSamples: [],
+  lapStartTime: Date.now(),
+  lapHistory: {},
 };
 const lastSpeedByIdx = {};
+const MAX_LAP_HISTORY = 30;
+const LAP_SAMPLE_INTERVAL_MS = 100; // ~10Hz is plenty for a post-lap trace
+let lastLapSampleTime = 0;
+let lastKnownTelemetry = { speed: 0, rpm: 0, throttle: 0, brake: 0 };
 
 let traceLapIndex = -1; // which car we're currently tracing (first seen crossing s/f cleanly)
 let traceStarted = false;
@@ -114,16 +132,28 @@ function getLocalIP() {
 
 let lastPhoneEmit = {};
 
-function send(channel, payload, hpChannels = []) {
+// Channels that only make sense on the PC dashboard (heavy payloads, or data
+// the phone has no UI for) never get broadcast over socket.io to the phone.
+const PC_ONLY = new Set([
+  "car-positions",
+  "track-trace",
+  "leaderboard",
+  "lap-complete",
+]);
+
+function send(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed())
     mainWindow.webContents.send(channel, payload);
-  const PC_ONLY = new Set(["car-positions", "track-trace", "leaderboard"]);
 
-  // 2. Broadcast ke HP (React Native) -> KITA THROTTLE BIAR SETIR GAK DELAY
+  // Broadcast to HP (React Native) -> throttled so the wheel/pedal loop
+  // never gets delayed by heavier channels.
   if (io && !PC_ONLY.has(channel)) {
     const now = Date.now();
     if (channel === "telemetry" || channel === "car-positions") {
-      if (!lastPhoneEmit[channel] || now - lastPhoneEmit[channel] >= 50) {
+      if (
+        !lastPhoneEmit[channel] ||
+        now - lastPhoneEmit[channel] >= phoneThrottleMs
+      ) {
         io.volatile.emit(channel, payload);
         lastPhoneEmit[channel] = now;
       }
@@ -162,6 +192,29 @@ function classifySector(ds, sector, value) {
   const result = { value, cls };
   ds.sectors[sector] = result;
   return result;
+}
+
+// Snapshot the samples collected since the last lap start, tag them with the
+// lap that just ended, store into session.lapHistory (capped), push to the
+// renderer, and reset the recording window for the new lap.
+function completeLapRecording(completedLapNum, lapTimeMs) {
+  const samples = session.currentLapSamples;
+  session.currentLapSamples = [];
+  session.lapStartTime = Date.now();
+
+  if (!completedLapNum || samples.length < 2) return;
+
+  const entry = { lapNum: completedLapNum, lapTimeMs, samples };
+  session.lapHistory[completedLapNum] = entry;
+
+  const keys = Object.keys(session.lapHistory)
+    .map(Number)
+    .sort((a, b) => a - b);
+  while (keys.length > MAX_LAP_HISTORY) {
+    delete session.lapHistory[keys.shift()];
+  }
+
+  send("lap-complete", entry);
 }
 
 // ---------------------------------------------------------------------------
@@ -280,6 +333,21 @@ function startCoreServer() {
       brake: p.m_brake,
     };
     send("telemetry", payload);
+
+    // ---- per-lap sample recording (throttled independently of the UI tick) ----
+    lastKnownTelemetry = {
+      speed: p.m_speed,
+      rpm: p.m_engineRPM,
+      throttle: p.m_throttle,
+      brake: p.m_brake,
+    };
+    if (now - lastLapSampleTime >= LAP_SAMPLE_INTERVAL_MS) {
+      lastLapSampleTime = now;
+      session.currentLapSamples.push({
+        t: now - session.lapStartTime,
+        ...lastKnownTelemetry,
+      });
+    }
   });
 
   f1.on(PACKETS.carStatus, (data) => {
@@ -287,21 +355,21 @@ function startCoreServer() {
     if (now - lastCarStatusTime < 500) return;
     lastCarStatusTime = now;
     const p = data.m_carStatusData[data.m_header.m_playerCarIndex];
-     send("telemetry-status", {
-       ersMode: p.m_ersDeployMode,
-       ersEnergy: p.m_ersStoreEnergy,
-       ersHarvestMGUK: p.m_ersHarvestedThisLapMGUK,
-       ersHarvestMGUH: p.m_ersHarvestedThisLapMGUH,
-       fuel: p.m_fuelInTank,
-       fuelRemainingLaps: p.m_fuelRemainingLaps,
-       fuelMix: p.m_fuelMix,
-       brakeBias: p.m_frontBrakeBias,
-       tractionControl: p.m_tractionControl,
-       absEnabled: p.m_antiLockBrakes,
-       pitLimiter: p.m_pitLimiterStatus,
-       tyreCompound: p.m_visualTyreCompound,
-       tyreAge: p.m_tyresAgeLaps,
-     });
+    send("telemetry-status", {
+      ersMode: p.m_ersDeployMode,
+      ersEnergy: p.m_ersStoreEnergy,
+      ersHarvestMGUK: p.m_ersHarvestedThisLapMGUK,
+      ersHarvestMGUH: p.m_ersHarvestedThisLapMGUH,
+      fuel: p.m_fuelInTank,
+      fuelRemainingLaps: p.m_fuelRemainingLaps,
+      fuelMix: p.m_fuelMix,
+      brakeBias: p.m_frontBrakeBias,
+      tractionControl: p.m_tractionControl,
+      absEnabled: p.m_antiLockBrakes,
+      pitLimiter: p.m_pitLimiterStatus,
+      tyreCompound: p.m_visualTyreCompound,
+      tyreAge: p.m_tyresAgeLaps,
+    });
 
     // F1 2020-specific: per-car FIA flag shown to the player right now (own car),
     // distinct from the marshal-zone list which is track-wide. Useful as the
@@ -377,6 +445,12 @@ function startCoreServer() {
         // (most likely) the completed lap's final sector times, pre-reset.
         if (lapNum > ds.lastLapNum && ds.prevS1 && ds.prevS2 && lastLapMs) {
           ds.s3 = lastLapMs - ds.prevS1 - ds.prevS2;
+
+          // Player-only: snapshot the samples collected during the lap that just
+          // ended and push them into lap history / to the renderer.
+          if (idx === session.playerIndex) {
+            completeLapRecording(lapNum - 1, lastLapMs);
+          }
         }
         ds.lastLapNum = lapNum;
         if (s1) ds.prevS1 = s1;
@@ -444,6 +518,9 @@ function startCoreServer() {
 
     session.leaderboard = rows;
     send("leaderboard", rows);
+    // Lightweight, phone-friendly summary of just the player's own row — this is
+    // what App.js listens to for delta/lap-number, since the full leaderboard is
+    // PC_ONLY and never reaches the phone.
     const me = rows.find((r) => r.isPlayer);
     if (me && io) io.volatile.emit("my-status", me);
   });
@@ -499,6 +576,9 @@ function startCoreServer() {
       traceBounds = null;
       session.driverSectors = {};
       session.bestSectors = { 1: null, 2: null, 3: null };
+      session.currentLapSamples = [];
+      session.lapStartTime = Date.now();
+      session.lapHistory = {};
       send("track-trace", { points: [], complete: false });
     }
     session._lastTrackId = session.trackId;
@@ -649,6 +729,25 @@ ipcMain.handle("adb-reverse-remove", async () => {
   return new Promise((resolve) => {
     exec("adb reverse --remove tcp:3000", () => resolve({ ok: true }));
   });
+});
+
+// Runtime control of how often "telemetry"/"car-positions" are allowed to
+// reach the phone. The renderer exposes this as a small numeric control next
+// to the WiFi/USB toggle.
+ipcMain.handle("set-phone-throttle", async (_event, ms) => {
+  const val = Number(ms);
+  if (!Number.isFinite(val) || val < 16)
+    return { ok: false, ms: phoneThrottleMs };
+  phoneThrottleMs = Math.round(val);
+  return { ok: true, ms: phoneThrottleMs };
+});
+
+ipcMain.handle("get-phone-throttle", async () => phoneThrottleMs);
+
+// Full lap history so the renderer can populate the compare-lap dropdowns
+// after a reload/reconnect (live laps still arrive via the "lap-complete" push).
+ipcMain.handle("get-lap-history", async () => {
+  return Object.values(session.lapHistory).sort((a, b) => a.lapNum - b.lapNum);
 });
 
 app.whenReady().then(() => {
