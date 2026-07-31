@@ -650,78 +650,6 @@ window.pitwall.on("telemetry", (d) => {
     document.getElementById("txtPRR").textContent = "RR " + rr.toFixed(1);
   }
 
-  if (typeof d.ersMode !== "undefined") {
-    const names = ["NONE", "MED", "HOTLAP", "OVERTAKE"];
-    document.getElementById("ersMode").textContent = names[d.ersMode] || "NONE";
-  }
-  if (typeof d.ersEnergy !== "undefined") {
-    const pct =
-      Math.min(100, Math.max(0, Math.round((d.ersEnergy / 4000000) * 100))) ||
-      0;
-    document.getElementById("ersEnergy").textContent = pct + "%";
-  }
-  if (typeof d.ersHarvestMGUK !== "undefined") {
-    setKv("ersHarvestK", (d.ersHarvestMGUK / 1000).toFixed(0) + " kJ");
-  }
-  if (typeof d.ersHarvestMGUH !== "undefined") {
-    setKv("ersHarvestH", (d.ersHarvestMGUH / 1000).toFixed(0) + " kJ");
-  }
-  if (typeof d.fuel !== "undefined") {
-    document.getElementById("fuelVal").textContent = d.fuel.toFixed(1) + " KG";
-  }
-  if (typeof d.fuelRemainingLaps !== "undefined") {
-    const low = d.fuelRemainingLaps < 1;
-    setKv(
-      "fuelLapsVal",
-      (d.fuelRemainingLaps >= 0 ? "+" : "") + d.fuelRemainingLaps.toFixed(2),
-      low ? "warn" : null,
-    );
-  }
-  if (typeof d.fuelMix !== "undefined") {
-    setKv("fuelMixVal", FUEL_MIX_NAME[d.fuelMix] || "—");
-  }
-  if (typeof d.tyreCompound !== "undefined") {
-    setKv("tyreCompoundVal", TYRE_COMPOUND_NAME[d.tyreCompound] || "—");
-  }
-  if (typeof d.tyreAge !== "undefined") {
-    setKv("tyreAgeVal", d.tyreAge + " lap");
-  }
-  if (typeof d.brakeBias !== "undefined") {
-    setKv("brakeBiasVal", d.brakeBias + "% / " + (100 - d.brakeBias) + "%");
-  }
-  if (typeof d.tractionControl !== "undefined") {
-    setKv(
-      "tcVal",
-      d.tractionControl === 0
-        ? "OFF"
-        : d.tractionControl === 1
-          ? "MEDIUM"
-          : "FULL",
-      d.tractionControl === 0 ? "off" : "on",
-    );
-  }
-  if (typeof d.absEnabled !== "undefined") {
-    setKv(
-      "absVal",
-      d.absEnabled ? "AKTIF" : "NONAKTIF",
-      d.absEnabled ? "on" : "off",
-    );
-  }
-  if (typeof d.pitLimiter !== "undefined") {
-    setKv(
-      "pitLimiterVal",
-      d.pitLimiter ? "AKTIF" : "OFF",
-      d.pitLimiter ? "warn" : "off",
-    );
-  }
-  if (typeof d.delta !== "undefined") {
-    const el = document.getElementById("deltaval");
-    const val = parseFloat(d.delta) || 0;
-    el.textContent = (val > 0 ? "+" : "") + val.toFixed(3);
-    el.classList.remove("neg", "pos");
-    el.classList.add(val < 0 ? "neg" : "pos");
-  }
-
   // g-force mini gauge (motion.m_gForceLateral / m_gForceLongitudinal)
   if (
     typeof d.gForceLat !== "undefined" ||
@@ -1122,3 +1050,142 @@ function drawLap() {
   // keep the freshest lap in view as the trend scrolls off to the right
   lapScrollWrap.scrollLeft = lapScrollWrap.scrollWidth;
 }
+
+window.pitwall.on("telemetry-status", (d) => {
+  if (typeof d.ersMode !== "undefined") {
+    const names = ["NONE", "MED", "HOTLAP", "OVERTAKE"];
+    document.getElementById("ersMode").textContent = names[d.ersMode] || "NONE";
+  }
+  if (typeof d.ersEnergy !== "undefined") {
+    const pct =
+      Math.min(100, Math.max(0, Math.round((d.ersEnergy / 4000000) * 100))) ||
+      0;
+    document.getElementById("ersEnergy").textContent = pct + "%";
+  }
+  if (typeof d.ersHarvestMGUK !== "undefined") {
+    setKv("ersHarvestK", (d.ersHarvestMGUK / 1000).toFixed(0) + " kJ");
+  }
+  if (typeof d.ersHarvestMGUH !== "undefined") {
+    setKv("ersHarvestH", (d.ersHarvestMGUH / 1000).toFixed(0) + " kJ");
+  }
+  if (typeof d.fuel !== "undefined") {
+    document.getElementById("fuelVal").textContent = d.fuel.toFixed(1) + " KG";
+  }
+  if (typeof d.fuelRemainingLaps !== "undefined") {
+    const low = d.fuelRemainingLaps < 1;
+    setKv(
+      "fuelLapsVal",
+      (d.fuelRemainingLaps >= 0 ? "+" : "") + d.fuelRemainingLaps.toFixed(2),
+      low ? "warn" : null,
+    );
+  }
+  if (typeof d.fuelMix !== "undefined") {
+    setKv("fuelMixVal", FUEL_MIX_NAME[d.fuelMix] || "—");
+  }
+  if (typeof d.tyreCompound !== "undefined") {
+    setKv("tyreCompoundVal", TYRE_COMPOUND_NAME[d.tyreCompound] || "—");
+  }
+  if (typeof d.tyreAge !== "undefined") {
+    setKv("tyreAgeVal", d.tyreAge + " lap");
+  }
+  if (typeof d.brakeBias !== "undefined") {
+    setKv("brakeBiasVal", d.brakeBias + "% / " + (100 - d.brakeBias) + "%");
+  }
+  if (typeof d.tractionControl !== "undefined") {
+    setKv(
+      "tcVal",
+      d.tractionControl === 0
+        ? "OFF"
+        : d.tractionControl === 1
+          ? "MEDIUM"
+          : "FULL",
+      d.tractionControl === 0 ? "off" : "on",
+    );
+  }
+  if (typeof d.absEnabled !== "undefined") {
+    setKv(
+      "absVal",
+      d.absEnabled ? "AKTIF" : "NONAKTIF",
+      d.absEnabled ? "on" : "off",
+    );
+  }
+  if (typeof d.pitLimiter !== "undefined") {
+    setKv(
+      "pitLimiterVal",
+      d.pitLimiter ? "AKTIF" : "OFF",
+      d.pitLimiter ? "warn" : "off",
+    );
+  }
+  if (typeof d.ersMode !== "undefined") {
+    const names = ["NONE", "MED", "HOTLAP", "OVERTAKE"];
+    document.getElementById("ersMode").textContent = names[d.ersMode] || "NONE";
+  }
+  if (typeof d.ersEnergy !== "undefined") {
+    const pct =
+      Math.min(100, Math.max(0, Math.round((d.ersEnergy / 4000000) * 100))) ||
+      0;
+    document.getElementById("ersEnergy").textContent = pct + "%";
+  }
+  if (typeof d.ersHarvestMGUK !== "undefined") {
+    setKv("ersHarvestK", (d.ersHarvestMGUK / 1000).toFixed(0) + " kJ");
+  }
+  if (typeof d.ersHarvestMGUH !== "undefined") {
+    setKv("ersHarvestH", (d.ersHarvestMGUH / 1000).toFixed(0) + " kJ");
+  }
+  if (typeof d.fuel !== "undefined") {
+    document.getElementById("fuelVal").textContent = d.fuel.toFixed(1) + " KG";
+  }
+  if (typeof d.fuelRemainingLaps !== "undefined") {
+    const low = d.fuelRemainingLaps < 1;
+    setKv(
+      "fuelLapsVal",
+      (d.fuelRemainingLaps >= 0 ? "+" : "") + d.fuelRemainingLaps.toFixed(2),
+      low ? "warn" : null,
+    );
+  }
+  if (typeof d.fuelMix !== "undefined") {
+    setKv("fuelMixVal", FUEL_MIX_NAME[d.fuelMix] || "—");
+  }
+  if (typeof d.tyreCompound !== "undefined") {
+    setKv("tyreCompoundVal", TYRE_COMPOUND_NAME[d.tyreCompound] || "—");
+  }
+  if (typeof d.tyreAge !== "undefined") {
+    setKv("tyreAgeVal", d.tyreAge + " lap");
+  }
+  if (typeof d.brakeBias !== "undefined") {
+    setKv("brakeBiasVal", d.brakeBias + "% / " + (100 - d.brakeBias) + "%");
+  }
+  if (typeof d.tractionControl !== "undefined") {
+    setKv(
+      "tcVal",
+      d.tractionControl === 0
+        ? "OFF"
+        : d.tractionControl === 1
+          ? "MEDIUM"
+          : "FULL",
+      d.tractionControl === 0 ? "off" : "on",
+    );
+  }
+  if (typeof d.absEnabled !== "undefined") {
+    setKv(
+      "absVal",
+      d.absEnabled ? "AKTIF" : "NONAKTIF",
+      d.absEnabled ? "on" : "off",
+    );
+  }
+  if (typeof d.pitLimiter !== "undefined") {
+    setKv(
+      "pitLimiterVal",
+      d.pitLimiter ? "AKTIF" : "OFF",
+      d.pitLimiter ? "warn" : "off",
+    );
+  }
+  if (typeof d.delta !== "undefined") {
+    const el = document.getElementById("deltaval");
+    const val = parseFloat(d.delta) || 0;
+    el.textContent = (val > 0 ? "+" : "") + val.toFixed(3);
+    el.classList.remove("neg", "pos");
+    el.classList.add(val < 0 ? "neg" : "pos");
+  }
+
+});

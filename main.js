@@ -121,10 +121,24 @@ let traceStarted = false;
 let traceBounds = null; // {minX,maxX,minZ,maxZ} for normalization
 
 function getLocalIP() {
-  const interfaces = os.networkInterfaces();
+  const interfaces = require("os").networkInterfaces();
+
   for (const name of Object.keys(interfaces)) {
+    const lowerName = name.toLowerCase();
+    if (
+      lowerName.includes("wsl") ||
+      lowerName.includes("virtual") ||
+      lowerName.includes("vbox") ||
+      lowerName.includes("vmware") ||
+      lowerName.includes("vethernet")
+    ) {
+      continue;
+    }
+
     for (const iface of interfaces[name]) {
-      if (iface.family === "IPv4" && !iface.internal) return iface.address;
+      if ((iface.family === "IPv4" || iface.family === 4) && !iface.internal) {
+        return iface.address;
+      }
     }
   }
   return "127.0.0.1";
