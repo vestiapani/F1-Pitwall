@@ -79,7 +79,7 @@ let phoneConnected = false;
 // allowed to reach the phone over socket.io. Configurable at runtime from the
 // PC renderer (see the "Throttle HP" control in the top strip) via
 // window.pitwall.setPhoneThrottle(ms) -> IPC "set-phone-throttle".
-let phoneThrottleMs = 50;
+let phoneThrottleMs = 150;
 
 // ---------------------------------------------------------------------------
 // Session state, rebuilt continuously from UDP packets, pushed to renderer.
@@ -142,23 +142,43 @@ const PC_ONLY = new Set([
 ]);
 
 function send(channel, payload) {
-  if (mainWindow && !mainWindow.isDestroyed())
+  if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload);
+  }
 
-  // Broadcast to HP (React Native) -> throttled so the wheel/pedal loop
-  // never gets delayed by heavier channels.
   if (io && !PC_ONLY.has(channel)) {
     const now = Date.now();
-    if (channel === "telemetry" || channel === "car-positions") {
-      if (
-        !lastPhoneEmit[channel] ||
-        now - lastPhoneEmit[channel] >= phoneThrottleMs
-      ) {
-        io.volatile.emit(channel, payload);
-        lastPhoneEmit[channel] = now;
+    if (
+      channel === "car-positions" ||
+      channel === "track-trace" ||
+      channel === "leaderboard"
+    )
+      return;
+    if (
+      channel === "flags" ||
+      channel === "penalties" ||
+      channel === "session-info"
+    ) {
+      io.emit(channel, payload);
+      return;
+    }
+    if (
+      !lastPhoneEmit[channel] ||
+      now - lastPhoneEmit[channel] >= phoneThrottleMs
+    ) {
+      let phonePayload = payload;
+      if (channel === "telemetry") {
+        phonePayload = {
+          speed: payload.speed,
+          gear: payload.gear,
+          rpm: payload.rpm,
+          drs: payload.drs,
+          tyreTemp: payload.tyreTemp,
+        };
       }
-    } else {
-      io.volatile.emit(channel, payload);
+
+      io.volatile.emit(channel, phonePayload);
+      lastPhoneEmit[channel] = now;
     }
   }
 }
@@ -239,66 +259,75 @@ function startCoreServer() {
   });
 
   io.on("connection", (socket) => {
-    phoneConnected = true;
-    send("phone-status", { connected: true });
+  phoneConnected = true;
+  send("phone-status", { connected: true });
 
-    socket.on("ping-check", (clientTime) => {
-      socket.emit("pong-check", clientTime);
-    });
+  // --- KODE PING BARU (Hitung Round-Trip Time murni) ---
+  // 1. Server nembak waktu PC ke HP setiap 1 detik
+  const pingInterval = setInterval(() => {
+    socket.emit("cek-ping", Date.now());
+  }, 1000);
 
-    let lastIn = {};
-    socket.on("controllerInput", (data) => {
-      if (data.A !== lastIn.A) {
-        controller.button.A.setValue(data.A);
-        lastIn.A = data.A;
-      }
-      if (data.B !== lastIn.B) {
-        controller.button.B.setValue(data.B);
-        lastIn.B = data.B;
-      }
-      if (data.X !== lastIn.X) {
-        controller.button.X.setValue(data.X);
-        lastIn.X = data.X;
-      }
-      if (data.Y !== lastIn.Y) {
-        controller.button.Y.setValue(data.Y);
-        lastIn.Y = data.Y;
-      }
-      if (data.LB !== lastIn.LB) {
-        controller.button.LEFT_SHOULDER.setValue(data.LB);
-        lastIn.LB = data.LB;
-      }
-      if (data.RB !== lastIn.RB) {
-        controller.button.RIGHT_SHOULDER.setValue(data.RB);
-        lastIn.RB = data.RB;
-      }
-      if (data.RT !== lastIn.RT) {
-        controller.axis.rightTrigger.setValue(data.RT);
-        lastIn.RT = data.RT;
-      }
-      if (data.LT !== lastIn.LT) {
-        controller.axis.leftTrigger.setValue(data.LT);
-        lastIn.LT = data.LT;
-      }
-      if (data.LX !== lastIn.LX) {
-        controller.axis.leftX.setValue(data.LX);
-        lastIn.LX = data.LX;
-      }
-    });
+  // 2. Server nerima pantulan dari HP, lalu hitung selisihnya
+  socket.on("pantulan-ping", (waktuDariServer) => {
+    const realPing = Date.now() - waktuDariServer;
+
+    send("latency", { ms: realPing });
+  });
+
+  // 3. Bersihin interval kalau kabel kecabut / HP diskonek
+  socket.on("disconnect", () => {
+    clearInterval(pingInterval);
+    phoneConnected = false;
+    send("phone-status", { connected: false });
+  });
+  // ----------------------------------------------------
+
+  let lastIn = {};
+  socket.on("controllerInput", (data) => {
+    if (data.A !== lastIn.A) {
+      controller.button.A.setValue(data.A);
+      lastIn.A = data.A;
+    }
+    if (data.B !== lastIn.B) {
+      controller.button.B.setValue(data.B);
+      lastIn.B = data.B;
+    }
+    if (data.X !== lastIn.X) {
+      controller.button.X.setValue(data.X);
+      lastIn.X = data.X;
+    }
+    if (data.Y !== lastIn.Y) {
+      controller.button.Y.setValue(data.Y);
+      lastIn.Y = data.Y;
+    }
+    if (data.LB !== lastIn.LB) {
+      controller.button.LEFT_SHOULDER.setValue(data.LB);
+      lastIn.LB = data.LB;
+    }
+    if (data.RB !== lastIn.RB) {
+      controller.button.RIGHT_SHOULDER.setValue(data.RB);
+      lastIn.RB = data.RB;
+    }
+    if (data.RT !== lastIn.RT) {
+      controller.axis.rightTrigger.setValue(data.RT);
+      lastIn.RT = data.RT;
+    }
+    if (data.LT !== lastIn.LT) {
+      controller.axis.leftTrigger.setValue(data.LT);
+      lastIn.LT = data.LT;
+    }
+    if (data.LX !== lastIn.LX) {
+      controller.axis.leftX.setValue(data.LX);
+      lastIn.LX = data.LX;
+    }
+  });
 
     socket.on("disconnect", () => {
       phoneConnected = false;
       send("phone-status", { connected: false });
     });
   });
-
-  setInterval(() => {
-    if (!phoneConnected) return;
-    const start = Date.now();
-    io.timeout(500).emit("latency-probe", () => {
-      send("latency", { ms: Date.now() - start });
-    });
-  }, 1000);
 
   const f1 = new F1TelemetryClient({ port: 20777, bigintEnabled: false });
 
@@ -716,6 +745,10 @@ function createWindow() {
 
   mainWindow.webContents.once("did-finish-load", () => {
     send("network-info", { ip: getLocalIP(), port: 3000 });
+
+    if (controller) {
+      send("vigem-status", { connected: true });
+    }
   });
 }
 

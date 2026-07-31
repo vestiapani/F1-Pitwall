@@ -193,7 +193,13 @@ function layoutResizers(gridId) {
   const page = appRoot.dataset.page;
   const saved = loadColWidths(gridId, page, cols.length);
   if (saved) {
-    grid.style.gridTemplateColumns = saved.map((w) => w + "px").join(" ");
+    const gridRect = grid.getBoundingClientRect();
+    const totalSaved = saved.reduce((a, b) => a + b, 0);
+    if (totalSaved > 0 && Math.abs(totalSaved - gridRect.width) < 50) {
+      grid.style.gridTemplateColumns = saved.map((w) => w + "px").join(" ");
+    } else {
+      localStorage.removeItem(`pitwall-cols-${gridId}-${page}`);
+    }
   }
 
   const gridRect = grid.getBoundingClientRect();
@@ -793,27 +799,31 @@ compareLapB.addEventListener("change", drawCompare);
 const chartCompare = document.getElementById("chartCompare");
 const ctxCompare = chartCompare.getContext("2d");
 
-function drawCompareSeries(
-  ctx,
-  canvas,
-  samples,
-  color,
-  gutter,
-  maxT,
-  maxSpeed,
-) {
+// Daftarkan event listener untuk dropdown metrik baru
+const compareMetric = document.getElementById("compareMetric");
+compareMetric.addEventListener("change", drawCompare);
+
+// Fungsi render series sekarang menerima nama properti (prop) dan opsi garis putus-putus
+// Hapus parameter maxT, kita gak butuh waktu lagi
+function drawCompareSeries(ctx, canvas, samples, color, gutter, maxVal, prop, isDashed = false) {
   if (!samples || samples.length < 2) return;
   ctx.beginPath();
   ctx.strokeStyle = color;
   ctx.lineWidth = 1.6 * devicePixelRatio;
+  
+  if (isDashed) ctx.setLineDash([4, 4]); 
+  else ctx.setLineDash([]);
+
   const plotW = canvas.width - gutter;
+  const n = samples.length - 1;
+
   samples.forEach((s, i) => {
-    const x = gutter + (s.t / (maxT || 1)) * plotW;
-    const y =
-      canvas.height - (s.speed / (maxSpeed || 1)) * canvas.height * 0.9 - 4;
+    const x = gutter + (i / n) * plotW;
+    const y = canvas.height - (s[prop] / (maxVal || 1)) * canvas.height * 0.88 - 4;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
   ctx.stroke();
+  ctx.setLineDash([]);
 }
 
 function drawCompare() {
@@ -825,39 +835,79 @@ function drawCompare() {
 
   const a = lapHistoryMap[Number(compareLapA.value)];
   const b = lapHistoryMap[Number(compareLapB.value)];
+  const metric = compareMetric.value || "speed";
+
   const maxT = Math.max(
     a ? a.samples[a.samples.length - 1].t : 0,
     b ? b.samples[b.samples.length - 1].t : 0,
     1000,
   );
-  const maxSpeed = Math.max(
-    a ? Math.max(...a.samples.map((s) => s.speed)) : 0,
-    b ? Math.max(...b.samples.map((s) => s.speed)) : 0,
-    100,
-  );
-  const ticks = [0, 1, 2, 3, 4].map((i) =>
-    String(Math.round((maxSpeed * (4 - i)) / 4)),
-  );
-  const gutter = drawAxisGrid(ctxCompare, chartCompare, ticks);
 
-  drawCompareSeries(
-    ctxCompare,
-    chartCompare,
-    a?.samples,
-    "#00d4ff",
-    gutter,
-    maxT,
-    maxSpeed,
-  );
-  drawCompareSeries(
-    ctxCompare,
-    chartCompare,
-    b?.samples,
-    "#b34dff",
-    gutter,
-    maxT,
-    maxSpeed,
-  );
+  ctxCompare.clearRect(0, 0, chartCompare.width, chartCompare.height);
+
+  if (metric === "speed") {
+    const maxSpeed = Math.max(
+      a ? Math.max(...a.samples.map((s) => s.speed)) : 0,
+      b ? Math.max(...b.samples.map((s) => s.speed)) : 0,
+      100,
+    );
+    const ticks = [0, 1, 2, 3, 4].map((i) => String(Math.round((maxSpeed * (4 - i)) / 4)));
+    const gutter = drawAxisGrid(ctxCompare, chartCompare, ticks);
+    
+    drawCompareSeries(
+      ctxCompare,
+      chartCompare,
+      a?.samples,
+      "#00d4ff",
+      gutter,
+      maxSpeed,
+      "speed",
+    );
+    drawCompareSeries(
+      ctxCompare,
+      chartCompare,
+      b?.samples,
+      "#b34dff",
+      gutter,
+      maxSpeed,
+      "speed",
+    );
+  } 
+  else if (metric === "rpm") {
+    const maxRpm = state.maxRpm || 13000;
+    const ticks = [0, 1, 2, 3, 4].map((i) => String(Math.round((maxRpm * (4 - i)) / 4 / 100) * 100));
+    const gutter = drawAxisGrid(ctxCompare, chartCompare, ticks);
+    
+    drawCompareSeries(
+      ctxCompare,
+      chartCompare,
+      a?.samples,
+      "#00d4ff",
+      gutter,
+      maxRpm,
+      "rpm",
+    );
+    drawCompareSeries(
+      ctxCompare,
+      chartCompare,
+      b?.samples,
+      "#b34dff",
+      gutter,
+      maxRpm,
+      "rpm",
+    );
+  } 
+  else if (metric === "tb") {
+    // Gas & Rem range: 0 sampai 1
+    const ticks = ["100%", "75%", "50%", "25%", "0%"];
+    const gutter = drawAxisGrid(ctxCompare, chartCompare, ticks);
+    
+    // Lap A (Cyan) -> Solid=Gas, Dashed=Rem
+    drawCompareSeries(ctxCompare, chartCompare, a?.samples, "#00d4ff", gutter, 1, "throttle", false);
+    drawCompareSeries(ctxCompare, chartCompare, a?.samples, "#00d4ff", gutter, 1, "brake", true);
+    drawCompareSeries(ctxCompare, chartCompare, b?.samples, "#b34dff", gutter, 1, "throttle", false);
+    drawCompareSeries(ctxCompare, chartCompare, b?.samples, "#b34dff", gutter, 1, "brake", true);
+}
 }
 
 // ---------------------------------------------------------------------------

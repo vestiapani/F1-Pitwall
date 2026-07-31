@@ -44,12 +44,16 @@
 
   /* ---------- top strip ---------- */
   #topstrip{
-    display:flex; align-items:stretch; gap:1px;
-    background:var(--line);
-    border-bottom:1px solid var(--line);
-    flex:none;
-    overflow:hidden;
-  }
+  display:flex; 
+  align-items:stretch; 
+  gap:1px;
+  background:var(--line);
+  border-bottom:1px solid var(--line);
+  flex:none;
+  flex-wrap: wrap;
+  position: relative; 
+  z-index: 99;
+}
   .tchip{
     background:var(--panel); padding:6px 10px;
     display:flex; align-items:center; gap:7px;
@@ -175,7 +179,13 @@
 
   #gearblock{ grid-column:1; }
   #gearblock .bd{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; overflow:hidden; padding:4px;}
-  #gearval{ font-size:clamp(42px, 9.5vh, 110px); font-weight:800; line-height:1; color:var(--yellow); font-family:var(--cond);}
+  #gearval{ 
+  font-size:clamp(42px, 9.5vh, 110px); 
+  font-weight:800; 
+  line-height:1; 
+  color:#ffffff;
+  font-family:var(--cond);
+}
   #gearval.redline{ color:var(--red); }
   #speedval{ font-size:clamp(17px, 2.6vh, 26px); color:var(--text); letter-spacing:.03em;}
   #speedval span{ font-size:11px; color:var(--text-dim); margin-left:5px;}
@@ -336,13 +346,12 @@
   #app[data-page="telemetry"] #zoneA{ display:none; }
   #app[data-page="telemetry"] #zoneB{ flex:1; }
   #app[data-page="telemetry"] #flagpencol{ display:none; }
- #app[data-page="telemetry"] #zoneB{
-  grid-template-columns: 1fr clamp(320px,26vw,420px);
-}
-#app[data-page="telemetry"] #gearblock{ display:none; }
-  #app[data-page="telemetry"] #gearval{ font-size:clamp(70px, 20vh, 220px); }
-  #app[data-page="telemetry"] #speedval{ font-size:clamp(22px, 4.5vh, 40px); }
-  #app[data-page="telemetry"] #deltaval{ font-size:clamp(16px, 2.6vh, 24px); }
+  #app[data-page="telemetry"] #zoneB{
+    grid-template-columns: 1fr clamp(320px,26vw,420px);
+  }
+  #app[data-page="telemetry"] #gearblock{ display:none; }
+  #app[data-page="telemetry"] #centercol{ grid-column: 1; }
+  #app[data-page="telemetry"] #tyresrscol{ grid-column: 2; }
   #app[data-page="telemetry"] #gforceBox{ width:84px; height:84px; }
   #app[data-page="telemetry"] #gforceText{ font-size:12px; }
   #app[data-page="telemetry"] #rpmbar{ height:clamp(22px,4vh,34px); }
@@ -488,8 +497,16 @@
 
             <div id="comparePanel">
               <div class="chart-cell-hd">
-                <span>Bandingkan Lap — Kecepatan</span>
+                <span style="display:flex; align-items:center;">
+                  Bandingkan Lap
+                  <select id="compareMetric" class="compare-select" style="margin-left: 6px;">
+                    <option value="speed">Kecepatan</option>
+                    <option value="tb">Gas / Rem</option>
+                    <option value="rpm">RPM</option>
+                  </select>
+                </span>
                 <span style="display:flex; align-items:center; gap:6px;">
+                  <!-- Dropdown Lap A dan Lap B tetap sama -->
                   <label style="display:flex;align-items:center;gap:3px;">
                     <span class="compare-swatch" style="background:var(--cyan);"></span>
                     <select id="compareLapA" class="compare-select"><option value="">Lap A</option></select>
