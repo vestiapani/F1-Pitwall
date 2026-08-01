@@ -1,6 +1,6 @@
 # 🏎️ F1 Pitwall Remote
 
-F1 Pitwall adalah aplikasi pendamping berbasis *dashboard* untuk game F1 (Codemasters/EA). Aplikasi ini memungkinkan Anda memantau telemetri mobil, posisi lawan di lintasan, *leaderboard*, hingga mengontrol fungsi mobil secara nirkabel melalui *smartphone* menggunakan emulasi *controller* Xbox.
+F1 Pitwall adalah aplikasi pendamping berbasis *dashboard* untuk game F1 (Codemasters/EA). Aplikasi ini memungkinkan Anda memantau telemetri mobil, posisi lawan di lintasan, *leaderboard*, hingga mengontrol fungsi mobil secara nirkabel/kabel melalui *smartphone* menggunakan emulasi *controller* Xbox. Telemetri game F1 tetap bisa dipakai tanpa menghubungkan ke aplikasi Mobile, Biarkan settingan telemetri UDP secara default maka F1 Pitwall otomatis terhubung untuk menerima data telemetri.
 
 ---
 
@@ -22,15 +22,15 @@ F1 Pitwall adalah aplikasi pendamping berbasis *dashboard* untuk game F1 (Codema
 ---
 
 ## 📱 Panduan Koneksi (PC ke Mobile)
-Aplikasi ini terdiri dari server PC dan antarmuka web/mobile. Untuk menghubungkan HP Anda ke PC, pilih salah satu metode di bawah ini:
+Aplikasi ini terdiri dari server PC dan APK mobile. Untuk menghubungkan HP Anda ke PC, pilih salah satu metode di bawah ini:
 
-### Metode 1: WiFi (Disarankan)
+### Metode 1: WiFi
 1. Pastikan PC dan HP terhubung di **jaringan WiFi yang sama**.
 2. Buka F1 Pitwall di PC, pastikan tombol indikator di *navbar* menunjukkan **WiFi**.
 3. Buka aplikasi/web di HP, masukkan **IP Server** yang tertera pada *navbar* aplikasi PC.
 4. *(Troubleshoot)* Jika gagal, pastikan **Port 3000** tidak terblokir oleh Windows Defender Firewall.
 
-### Metode 2: USB (ADB)
+### Metode 2: USB (ADB) (Disarankan)
 1. Aktifkan **USB Debugging** pada opsi pengembang (*Developer Options*) di HP Anda.
 2. Hubungkan HP ke PC menggunakan kabel data.
 3. Klik tombol **USB** pada *navbar* di aplikasi PC. Tunggu hingga notifikasi ADB aktif.
