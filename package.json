@@ -1,6 +1,6 @@
 {
   "name": "f1-pitwall",
-  "version": "2.8.0",
+  "version": "2.8.1",
   "description": "F1 Remote — Pitwall Control Panel",
   "author": "VestiaPani <ivan131335@gmail.com>",
   "main": "main.js",

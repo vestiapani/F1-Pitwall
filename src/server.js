@@ -72,6 +72,10 @@ function initServer(send) {
         controller.axis.leftX.setValue(data.LX);
         lastIn.LX = data.LX;
       }
+      controller.button.START.setValue(state.START ? 1 : 0);
+      controller.button.BACK.setValue(state.SELECT ? 1 : 0);
+      controller.button.LEFT_THUMB.setValue(state.L3 ? 1 : 0);
+      controller.button.RIGHT_THUMB.setValue(state.R3 ? 1 : 0);
     });
 
     socket.on("disconnect", () => {
