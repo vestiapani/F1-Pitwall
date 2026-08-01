@@ -1,5 +1,30 @@
 const { Server } = require("socket.io");
 const ViGEmClient = require("vigemclient");
+const { keyboard, Key } = require("@nut-tree-fork/nut-js");
+
+// No artificial delay between simulated key down/up — we want this to feel
+// as instant as a real keypress, since it's driving macro buttons in a
+// racing game.
+keyboard.config.autoDelayMs = 0;
+
+// Macro buttons that used to be routed to controller2's face/shoulder
+// buttons clash with controller1's driving buttons (F1 2020 merges all
+// connected gamepads into one logical input, so "B" on either controller
+// triggers the same in-game action). Routing them to keyboard keys instead
+// avoids the clash entirely — keyboard and gamepad are independent input
+// channels, so steering/throttle/brake on controller1 keep working with
+// zero interruption while these fire.
+//
+// In F1 2020, bind these actions (Settings > Controls > Keyboard) to the
+// same keys used here: Radio, Overtake, Pit Limiter, Brake Bias +/-, DRS.
+const macroKeyMap = {
+  MACRO_OT: Key.M,
+  MACRO_PL: Key.P,
+  MACRO_BB_PLUS: Key.K,
+  MACRO_BB_MINUS: Key.L,
+  MACRO_DRS: Key.F,
+  MACRO_RADIO: Key.T,
+};
 
 function initServer(send) {
   const io = new Server(3000, {
@@ -15,7 +40,9 @@ function initServer(send) {
   const controller1 = client.createX360Controller();
   controller1.connect();
 
-  // Stik 2: Khusus buat tombol makro (Overtake, Pit Limiter, dll)
+  // Stik 2: sekarang cuma dipakai buat ERS +/- dan DIFF +/- (lewat D-pad
+  // axis), karena itu satu-satunya sinyal yang gak bentrok sama controller1.
+  // Semua macro tombol lain udah dipindah ke keyboard simulation di atas.
   const controller2 = client.createX360Controller();
   controller2.connect();
 
@@ -92,42 +119,26 @@ function initServer(send) {
       controller1.button.RIGHT_THUMB.setValue(data.R3 ? 1 : 0);
 
       // --------------------------------------------------
-      // ROUTING STIK 2 (Tombol Makro)
+      // ROUTING MACRO BUTTONS (keyboard simulation)
+      // OT / PL / BB+ / BB- / DRS / RADIO — semuanya lewat keyboard
+      // sekarang, bukan controller2 button, supaya gak nabrak input
+      // controller1 (lihat komentar di macroKeyMap di atas).
       // --------------------------------------------------
-      const macroButtonMap = [
-        // [key dari mobile app, tombol fisik di controller2]
-        ["MACRO_OT", controller2.button.A],
-        ["MACRO_PL", controller2.button.B],
-        ["MACRO_BB_PLUS", controller2.button.X],
-        ["MACRO_BB_MINUS", controller2.button.Y],
-        ["MACRO_DRS", controller2.button.RIGHT_SHOULDER],
-        ["MACRO_RADIO", controller2.button.LEFT_SHOULDER],
-      ];
-
-      for (const [key, btn] of macroButtonMap) {
-        if (data[key] !== lastIn[key]) {
-          if (!btn || typeof btn.setValue !== "function") {
-            if (!lastIn._warned || !lastIn._warned[key]) {
-              console.warn(
-                '[server.js] Tombol Stik2 untuk "' +
-                  key +
-                  '" tidak ditemukan di controller2.button — cek nama property vigemclient.',
-              );
-              lastIn._warned = Object.assign({}, lastIn._warned, {
-                [key]: true,
-              });
-            }
-            lastIn[key] = data[key];
-            continue;
+      for (const [dataKey, keyCode] of Object.entries(macroKeyMap)) {
+        if (data[dataKey] !== lastIn[dataKey]) {
+          if (data[dataKey]) {
+            keyboard.pressKey(keyCode);
+          } else {
+            keyboard.releaseKey(keyCode);
           }
-          btn.setValue(data[key] ? 1 : 0);
-          lastIn[key] = data[key];
+          lastIn[dataKey] = data[dataKey];
         }
       }
 
       // --------------------------------------------------
       // ROUTING D-PAD (ERS +/- pakai axis vertikal, DIFF +/- pakai axis
-      // horizontal).
+      // horizontal) — ini tetap lewat controller2, karena controller1
+      // gak pernah kirim sinyal D-pad sama sekali, jadi gak ada bentrok.
       // --------------------------------------------------
       const dpadVertVal = data.MACRO_ERS_PLUS
         ? 1
