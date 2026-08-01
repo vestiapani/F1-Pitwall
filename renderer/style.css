@@ -1,0 +1,512 @@
+ :root{
+    --bg:#000000;
+    --panel:#0c0c0c;
+    --panel-2:#121212;
+    --panel-3:#080808;
+    --line:#000000;
+    --line-soft:#820b1f;
+    --text:#d4d4d4;
+    --text-dim:#6e6e6e;
+    --text-mid:#9a9a9a;
+    --cyan:#00d4ff;
+    --red:#ff2b4d;
+    --amber:#ffb020;
+    --green:#17e88f;
+    --blue:#3d7bfd;
+    --yellow:#f5d90a;
+    --purple:#b34dff;
+    --mono: "SFMono-Regular","Consolas","Roboto Mono","Cascadia Mono",monospace;
+    --cond: "Oswald","Arial Narrow","Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{
+    background:var(--bg); color:var(--text);
+    font-family:var(--mono);
+    height:100%;
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  body{
+    background-image:
+      linear-gradient(var(--line-soft) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+    background-size:28px 28px;
+    background-position:-1px -1px;
+    background-color:var(--bg);
+    display:flex; flex-direction:column;
+  }
+
+  /* ---------- TOPSTRIP MODERN REDESIGN ---------- */
+#topstrip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  background: var(--panel-3); /* Background lebih gelap biar nyatu */
+  border-bottom: 1px solid var(--line);
+  flex: none;
+  z-index: 99;
+  padding-right: 12px;
+}
+
+.strip-section {
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+/* --- KIRI: Brand & Navigasi --- */
+.brand-nav { gap: 16px; }
+
+#brand {
+  padding: 0 20px;
+  font-family: var(--cond);
+  font-weight: 700;
+  letter-spacing: .18em;
+  font-size: 15px;
+  background: var(--red); /* Aksen warna merah biar ngejreng kayak logo F1 */
+  color: white;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+#brand b { color: #fff; font-weight: 900; }
+
+#pageNav {
+  display: flex;
+  height: 100%;
+}
+
+.navbtn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-family: var(--cond);
+  font-weight: 700;
+  letter-spacing: .12em;
+  font-size: 11px;
+  text-transform: uppercase;
+  padding: 0 16px;
+  cursor: pointer;
+  height: 100%;
+  border-bottom: 2px solid transparent; /* Indikator aktif di bawah */
+  transition: all 0.2s ease;
+}
+.navbtn:hover { color: var(--text); }
+.navbtn.active { 
+  color: var(--cyan); 
+  border-bottom: 2px solid var(--cyan); 
+  background: linear-gradient(0deg, rgba(0,212,255,0.08) 0%, transparent 100%);
+}
+
+/* --- TENGAH: Info Sesi --- */
+.session-info {
+  gap: 16px;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  padding: 0 24px;
+}
+
+/* --- KANAN: Koneksi --- */
+.connection-info { gap: 12px; }
+
+/* Desain chip yang lebih polos tanpa border ngotak */
+.tchip {
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--cond);
+  white-space: nowrap;
+}
+.tchip .label { color: var(--text-dim); font-size: 9.5px; text-transform: uppercase; }
+.tchip .val { font-family: var(--mono); font-size: 12px; color: var(--text); font-weight: 600; }
+
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim); flex: none; }
+.dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.dot.off { background: var(--red); box-shadow: 0 0 8px var(--red); }
+
+/* Chip Safety Car dibikin stand-out */
+#trackStatusChip {
+  padding: 4px 12px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--line);
+  font-weight: 700;
+}
+#trackStatusChip.clear { border-color: var(--green); background: rgba(23,232,143,0.1); }
+#trackStatusChip.clear .val { color: var(--green); }
+#trackStatusChip.sc, #trackStatusChip.vsc { border-color: var(--amber); background: rgba(255,176,32,0.1); }
+#trackStatusChip.sc .val, #trackStatusChip.vsc .val { color: var(--amber); }
+
+/* Tombol dan Input Settings */
+.modebtn, #throttleApply {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  font-family: var(--cond);
+  font-weight: 700;
+  font-size: 10px;
+  padding: 4px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.modebtn:hover, #throttleApply:hover { color: var(--text); border-color: var(--text-dim); }
+.modebtn.active { color: var(--cyan); border-color: var(--cyan); background: rgba(0,212,255,0.1); }
+
+#throttleInput {
+  width: 50px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 6px;
+  border-radius: 3px;
+  text-align: center;
+}
+
+  /* ---------- main layout ---------- */
+  #app{ flex:1; display:flex; flex-direction:column; min-height:0; gap:1px; background:var(--line); padding:1px; }
+
+  #zoneA{ display:grid; grid-template-columns: 1fr clamp(320px, 30vw, 480px); gap:1px; background:var(--line); flex:1.7; min-height:0; position:relative; }
+
+  .panel{
+    background:var(--panel); border:1px solid var(--line);
+    display:flex; flex-direction:column; overflow:hidden; min-height:0;
+  }
+  .panel > .hd{
+    font-family:var(--cond); font-size:10.5px; letter-spacing:.13em; text-transform:uppercase;
+    color:var(--text-dim); padding:6px 10px; border-bottom:1px solid var(--line);
+    display:flex; justify-content:space-between; align-items:center; flex:none;
+    gap:8px;
+  }
+  .panel > .bd{ padding:0; flex:1; min-height:0; overflow:auto; }
+
+  /* leaderboard table */
+  #leaderboardPanel{ grid-column:1; grid-row:1; }
+  table.lb{ width:100%; border-collapse:collapse; font-size:clamp(10.5px, 1.1vh, 12.5px); }
+  table.lb thead th{
+    position:sticky; top:0; background:var(--panel-2); color:var(--text-dim);
+    font-family:var(--cond); font-weight:500; letter-spacing:.08em; text-transform:uppercase;
+    font-size:9.5px; text-align:left; padding:5px 8px; border-bottom:1px solid var(--line);
+    z-index:1;
+  }
+  table.lb td{ padding:4px 8px; border-bottom:1px solid var(--line-soft); white-space:nowrap; }
+  table.lb tr.me{ background:rgba(0,212,255,0.07); }
+  table.lb tr.me td{ color:var(--cyan); }
+  table.lb tr.inpit td.pos{ color:var(--red); }
+  .teamtag{
+    display:inline-block; font-size:9px; font-family:var(--cond); font-weight:700;
+    padding:1px 5px; border-radius:2px; color:#04070b; letter-spacing:.03em;
+  }
+  .pit-badge{ font-size:9px; color:var(--red); border:1px solid var(--red); padding:0 4px; border-radius:2px; }
+  .lb-num{ font-variant-numeric: tabular-nums; }
+  /* sector colouring: purple = fastest in session, green = personal-best improvement,
+     red = not an improvement over the driver's own best for that sector */
+  .s-purple{ color:var(--purple); font-weight:700; }
+  .s-green{ color:var(--green); }
+  .s-red{ color:var(--red); }
+
+  /* track map */
+  #mapPanel{ grid-column:2; grid-row:1; }
+  #mapPanel .bd{ position:relative; display:flex; align-items:center; justify-content:center; }
+  #trackSvg{ width:100%; height:100%; }
+  .track-outline{ fill:none; stroke:#2b3648; stroke-width:2.4; }
+  .car-dot{ transition: cx .15s linear, cy .15s linear; }
+  .car-dot.player{ stroke:var(--cyan); stroke-width:1.5; }
+  #mapMeta{
+    position:absolute; top:6px; left:8px; font-family:var(--cond); font-size:11px;
+    color:var(--text-dim); letter-spacing:.05em; line-height:1.5;
+  }
+  #mapMeta b{ color:var(--text); }
+  #traceHint{
+    position:absolute; bottom:6px; right:8px; font-size:9px; color:var(--text-dim);
+    font-family:var(--cond); letter-spacing:.05em;
+  }
+
+  /* ===== ZONE B: gear/speed | rpm+chart | tyres+brakes | ers/fuel/status | flags+penalties ===== */
+  #zoneB{
+    display:grid;
+    grid-template-columns: clamp(190px,17vw,260px) 1fr clamp(210px,19vw,280px) clamp(230px,20vw,300px);
+    gap:1px; background:var(--line); flex:1; min-height:0; position:relative;
+  }
+
+  #gearblock{ grid-column:1; }
+  #gearblock .bd{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; overflow:hidden; padding:4px;}
+  #gearval{ 
+  font-size:clamp(42px, 9.5vh, 110px); 
+  font-weight:800; 
+  line-height:1; 
+  color:#ffffff;
+  font-family:var(--cond);
+}
+  #gearval.redline{ color:var(--red); }
+  #speedval{ font-size:clamp(17px, 2.6vh, 26px); color:var(--text); letter-spacing:.03em;}
+  #speedval span{ font-size:11px; color:var(--text-dim); margin-left:5px;}
+  #deltaval{ margin-top:6px; font-size:clamp(13px,1.6vh,17px); padding:3px 10px; border:1px solid var(--line); }
+  #deltaval.neg{ color:var(--green); border-color:var(--green); }
+  #deltaval.pos{ color:var(--red); border-color:var(--red); }
+
+  /* g-force mini gauge */
+  #gforceWrap{ display:flex; align-items:center; gap:10px; margin-top:8px; }
+  #gforceBox{
+    width:52px; height:52px; border:1px solid var(--line); border-radius:4px; position:relative;
+    background:var(--panel-2); flex:none;
+  }
+  #gforceBox::before, #gforceBox::after{
+    content:""; position:absolute; background:var(--line-soft);
+  }
+  #gforceBox::before{ top:50%; left:2px; right:2px; height:1px; }
+  #gforceBox::after{ left:50%; top:2px; bottom:2px; width:1px; }
+  #gforceDot{
+    position:absolute; width:8px; height:8px; margin:-4px 0 0 -4px; border-radius:50%;
+    background:var(--amber); left:50%; top:50%; box-shadow:0 0 6px var(--amber);
+    transition:left .08s linear, top .08s linear;
+  }
+  #gforceText{ font-size:10px; color:var(--text-dim); line-height:1.6; }
+  #gforceText b{ color:var(--text); font-weight:600; }
+
+  #centercol{ grid-column:2; display:flex; flex-direction:column; gap:1px; background:var(--line); min-height:0;}
+  #centercol .panel{ border:none; }
+  #rpmpanel{ flex:none; }
+  #rpmpanel .bd{ display:flex; align-items:center; padding:10px 12px; overflow:visible; }
+  #rpmbar{ display:flex; gap:3px; width:100%; height:clamp(14px,2vh,20px); }
+  .rpmled{ flex:1; background:#1a1f28; border-radius:2px; }
+  #rpmnum{ margin-left:12px; font-size:clamp(12px,1.6vh,16px); color:var(--text-dim); width:80px; text-align:right; }
+  #chartpanel{ flex:1; min-height:0; }
+  #chartpanel .bd{ padding:5px; overflow:hidden; display:flex; flex-direction:column; gap:6px; }
+
+  /* ---- 2x2 grid of small-multiple telemetry charts, showing live traces. ---- */
+  #chartsGrid{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap:5px;
+    width:100%; flex:1.4; min-height:0;
+  }
+  .chart-cell{
+    display:flex; flex-direction:column; min-height:0; min-width:0;
+    background:var(--panel-3); border:1px solid var(--line-soft); border-radius:2px;
+    padding:4px 7px 6px;
+  }
+  .chart-cell-hd{
+    display:flex; justify-content:space-between; align-items:baseline; flex:none;
+    font-family:var(--cond); font-size:9px; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--text-dim); margin-bottom:3px;
+  }
+  .chart-cell-val{
+    font-family:var(--mono); font-size:11px; font-weight:700; letter-spacing:0;
+    text-transform:none; color:var(--text);
+  }
+  .chart-cell canvas{ flex:1; min-height:0; width:100%; height:100%; display:block; }
+
+  /* ---- lap-time trend: horizontally scrollable so the full session history
+     stays readable instead of getting squeezed as more laps come in. ---- */
+  #cellLap .chart-cell-hd{ flex-wrap:wrap; row-gap:3px; }
+  #lapScrollWrap{ flex:1; min-height:0; overflow-x:auto; overflow-y:hidden; }
+  #chartLap{ height:100%; display:block; } /* width set in px via JS, scales with lap count */
+
+  /* ---- compare-lap panel: overlays two recorded laps' speed traces ---- */
+  #comparePanel{
+    flex:1; min-height:0;
+    background:var(--panel-3); border:1px solid var(--line-soft); border-radius:2px;
+    display:flex; flex-direction:column; padding:4px 7px 6px;
+  }
+  #comparePanel .chart-cell-hd{ flex-wrap:wrap; row-gap:4px; }
+  .compare-select{
+    background:var(--panel-2); color:var(--text); border:1px solid var(--line);
+    font-family:var(--mono); font-size:9.5px; padding:2px 4px; border-radius:2px; max-width:120px;
+  }
+  .compare-swatch{ display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:3px; }
+  #chartCompare{ flex:1; min-height:0; width:100%; display:block; }
+
+  /* on the Telemetry page the whole thing gets more room, so bump the
+     small-multiple charts up in size/legibility too */
+  #app[data-page="telemetry"] .chart-cell-hd{ font-size:11.5px; }
+  #app[data-page="telemetry"] .chart-cell-val{ font-size:14px; }
+  #app[data-page="telemetry"] #chartsGrid{ gap:8px; }
+
+  #tyresrscol{ grid-column:3; display:flex; flex-direction:column; gap:1px; background:var(--line); min-height:0;}
+  #tyresrscol .panel{ border:none; }
+  #tyresvg{ width:100%; max-height:22vh; }
+  .tyre-readout{ display:grid; grid-template-columns:1fr 1fr; gap:5px; margin-top:6px; font-size:10.5px;}
+  .tyre-readout div{ background:var(--panel-2); border:1px solid var(--line); padding:4px 6px; text-align:center; }
+  .sub-label{ font-family:var(--cond); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim); margin:8px 0 3px; }
+
+  .kv{ display:flex; justify-content:space-between; padding:3.5px 0; border-bottom:1px dashed var(--line); font-size:10.5px;}
+  .kv:last-child{ border-bottom:none; }
+  .kv .k{ color:var(--text-dim); }
+  .kv .v{ color:var(--text); font-weight:600; }
+  .kv .v.on{ color:var(--green); }
+  .kv .v.off{ color:var(--text-dim); }
+  .kv .v.warn{ color:var(--amber); }
+
+  #flagpencol{ grid-column:4; display:flex; flex-direction:column; gap:1px; background:var(--line); min-height:0; }
+  #flagpencol .panel{ border:none; }
+
+  /* flags panel */
+  #flagStrip{ display:flex; gap:4px; padding:8px; flex-wrap:wrap; }
+  .flagchip{
+    flex:1; min-width:70px; text-align:center; padding:7px 4px; border-radius:3px;
+    font-family:var(--cond); font-size:10px; letter-spacing:.08em; text-transform:uppercase;
+    border:1px solid var(--line); color:var(--text-dim); background:var(--panel-2);
+  }
+  .flagchip.active-green{ background:rgba(23,232,143,0.14); border-color:var(--green); color:var(--green); }
+  .flagchip.active-yellow{ background:rgba(245,217,10,0.14); border-color:var(--yellow); color:var(--yellow); }
+  .flagchip.active-blue{ background:rgba(61,123,253,0.14); border-color:var(--blue); color:var(--blue); }
+  .flagchip.active-red{ background:rgba(255,43,77,0.14); border-color:var(--red); color:var(--red); animation:pulse-red 1s infinite; }
+  @keyframes pulse-red{ 0%,100%{opacity:1;} 50%{opacity:.55;} }
+  #trackStatusBanner{
+    margin:0 8px 8px 8px; padding:6px 8px; text-align:center; font-family:var(--cond);
+    letter-spacing:.1em; font-size:11px; border:1px solid var(--line); color:var(--text-dim);
+    text-transform:uppercase; background:var(--panel-2);
+  }
+  #trackStatusBanner.warn{ color:var(--amber); border-color:var(--amber); background:rgba(255,176,32,.1); }
+
+  /* penalties list */
+  #penList{ list-style:none; padding:6px 8px; font-size:10.5px; display:flex; flex-direction:column; gap:5px; }
+  #penList li{
+    border:1px solid var(--line); background:var(--panel-2); padding:5px 7px; border-radius:2px;
+    display:flex; flex-direction:column; gap:1px;
+  }
+  #penList li .pen-head{ display:flex; justify-content:space-between; color:var(--text); font-weight:600; }
+  #penList li .pen-sub{ color:var(--text-dim); font-size:9.5px; }
+  #penList .empty{ color:var(--text-dim); text-align:center; padding:14px 0; border:none; background:none; }
+
+  /* draggable column resizers (JS-positioned overlays between grid panels) */
+  .col-resizer{
+    position:absolute; top:0; bottom:0; width:9px; cursor:col-resize; z-index:6;
+    background:transparent;
+  }
+  .col-resizer::after{
+    content:""; position:absolute; left:50%; top:0; bottom:0; width:1px;
+    background:var(--line); transform:translateX(-50%);
+  }
+  .col-resizer:hover::after, .col-resizer.dragging::after{ background:var(--cyan); width:2px; }
+  .col-resizer:hover, .col-resizer.dragging{ background:rgba(0,212,255,0.08); }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+:hover::-webkit-scrollbar-track { background: var(--panel); }
+:hover::-webkit-scrollbar-thumb { background: var(--red); }
+::-webkit-scrollbar-thumb:hover { background: #ff5470; }
+  /* =========================================================
+     PAGE MODES — same DOM, CSS just re-weights/hides sections
+     so each page fills the viewport with no page-level scroll.
+     ========================================================= */
+
+  /* TELEMETRY page: hide timing zone + flags/penalties column,
+     blow up the car panels to fill the screen. */
+  #app[data-page="telemetry"] #zoneA{ display:none; }
+  #app[data-page="telemetry"] #zoneB{ flex:1; }
+  #app[data-page="telemetry"] #flagpencol{ display:none; }
+  #app[data-page="telemetry"] #zoneB{
+    grid-template-columns: 1fr clamp(320px,26vw,420px);
+  }
+  #app[data-page="telemetry"] #gearblock{ display:none; }
+  #app[data-page="telemetry"] #centercol{ grid-column: 1; }
+  #app[data-page="telemetry"] #tyresrscol{ grid-column: 2; }
+  #app[data-page="telemetry"] #gforceBox{ width:84px; height:84px; }
+  #app[data-page="telemetry"] #gforceText{ font-size:12px; }
+  #app[data-page="telemetry"] #rpmbar{ height:clamp(22px,4vh,34px); }
+  #app[data-page="telemetry"] .tyre-readout{ font-size:12px; }
+  #app[data-page="telemetry"] .kv{ font-size:12px; padding:6px 0; }
+  #app[data-page="telemetry"] #tyresvg{ max-height:26vh; }
+
+  /* TIMING page: hide the car-telemetry zone (except keep flags/
+     penalties visible), blow up leaderboard + track map. */
+  #app[data-page="timing"] #zoneB{ flex:0 0 auto; }
+  #app[data-page="timing"] #tyresrscol{ display:none; }
+  #app[data-page="timing"] #zoneB{ grid-template-columns: 1fr; height:34vh; }
+  #app[data-page="timing"] #zoneA{ flex:1; grid-template-columns: 1fr clamp(420px, 38vw, 640px); }
+  #app[data-page="timing"] table.lb{ font-size:clamp(12px, 1.5vh, 15px); }
+  #app[data-page="timing"] table.lb thead th{ font-size:11px; padding:7px 10px; }
+  #app[data-page="timing"] table.lb td{ padding:6px 10px; }
+
+  /* ---------- MODAL PANDUAN IN-APP ---------- */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-content {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  width: 550px;
+  max-width: 90%;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+  font-family: var(--cond);
+  color: var(--text);
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.modal-header h2 {
+  font-size: 15px;
+  margin: 0;
+  color: var(--cyan);
+  letter-spacing: 0.1em;
+}
+
+.close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 22px;
+  cursor: pointer;
+  transition: 0.2s ease;
+  line-height: 1;
+}
+
+.close-btn:hover {
+  color: var(--red);
+  transform: scale(1.1);
+}
+
+.modal-body {
+  padding: 24px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.modal-body h3 {
+  font-family: var(--cond);
+  font-size: 16px;
+  color: var(--text);
+  margin: 0 0 10px 0;
+  letter-spacing: 0.05em;
+}
+
+.modal-body ul {
+  margin: 0 0 20px 0;
+  padding-left: 20px;
+  color: var(--text-dim);
+}
+
+.modal-body b { color: var(--text); }
+.modal-body code { background: var(--panel-3); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--line); }
+
+.modal-body hr {
+  border: none;
+  border-top: 1px dashed var(--line);
+  margin: 20px 0;
+}

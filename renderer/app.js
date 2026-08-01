@@ -8,6 +8,35 @@
 // All panels always live in the DOM and keep receiving live data no matter
 // which page is active — switching pages just re-weights/hides sections via
 // CSS ([data-page="..."] rules in index.html), so nothing needs to reload.
+
+// --- LOGIKA MODAL HELP ---
+const btnHelp = document.getElementById("btnHelp");
+const helpModal = document.getElementById("helpModal");
+const closeHelp = document.getElementById("closeHelp");
+
+// Buka modal saat klik icon '?'
+if (btnHelp && helpModal) {
+  btnHelp.addEventListener("click", () => {
+    helpModal.style.display = "flex";
+  });
+}
+
+// Tutup modal saat klik silang
+if (closeHelp && helpModal) {
+  closeHelp.addEventListener("click", () => {
+    helpModal.style.display = "none";
+  });
+}
+
+// Tutup modal saat klik sembarang di luar kotak konten
+if (helpModal) {
+  helpModal.addEventListener("click", (e) => {
+    if (e.target === helpModal) {
+      helpModal.style.display = "none";
+    }
+  });
+}
+
 const appRoot = document.getElementById("app");
 document.querySelectorAll(".navbtn").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -16,7 +45,7 @@ document.querySelectorAll(".navbtn").forEach((btn) => {
       .forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     appRoot.dataset.page = btn.dataset.page;
-    // Each page defines its own column count/widths in CSS (see index.html);
+    // Each page defines its own column count/widths in CSS (see style.css);
     // drop any manual resize override so the new page's layout applies cleanly,
     // then re-measure and re-drop the drag handles once the reflow settles.
     RESIZABLE_GRIDS.forEach((id) => {
@@ -44,7 +73,7 @@ btnWifi.addEventListener("click", async () => {
   try {
     await window.pitwall.adbReverseRemove();
   } catch {
-    /* ignore — removing a tunnel that was never set up is harmless */
+
   }
 });
 
@@ -73,7 +102,7 @@ async function initThrottle() {
     const ms = await window.pitwall.getPhoneThrottle();
     if (ms) throttleInput.value = ms;
   } catch {
-    /* keep the default shown in the input */
+
   }
 }
 initThrottle();
@@ -123,7 +152,7 @@ function fmtGap(ms) {
   return (ms >= 0 ? "+" : "") + (ms / 1000).toFixed(3);
 }
 // F1 2020 has no native time-delta field in LapData, so gap/interval are derived from
-// m_totalDistance and shown in metres rather than seconds (see main.js for details).
+// m_totalDistance and shown in metres rather than seconds.
 function fmtGapS(s) {
   if (s === null || s === undefined || Number.isNaN(s)) return "—";
   return (s > 0 ? "+" : "") + s.toFixed(3);
@@ -137,7 +166,7 @@ function fmtMsAxis(ms) {
   return m > 0 ? `${m}:${s}` : `${(abs / 1000).toFixed(1)}`;
 }
 // sector time colour: purple = session-fastest, green = personal-best improvement,
-// red = not an improvement (set by main.js, see classifySector)
+// red = not an improvement (see classifySector)
 function sectorCls(cls) {
   return cls ? ` s-${cls}` : "";
 }
@@ -167,7 +196,7 @@ function saveColWidths(gridId, page, widths) {
       JSON.stringify(widths),
     );
   } catch {
-    /* storage unavailable — resizing still works, just won't persist */
+
   }
 }
 function loadColWidths(gridId, page, count) {
@@ -177,7 +206,7 @@ function loadColWidths(gridId, page, count) {
     const arr = JSON.parse(raw);
     if (Array.isArray(arr) && arr.length === count) return arr;
   } catch {
-    /* ignore malformed/unavailable storage */
+
   }
   return null;
 }
@@ -591,14 +620,14 @@ window.pitwall.on("telemetry", (d) => {
     leds.forEach((el, i) => {
       let c = "#1a1f28"; // Mati
       if (i < lit) {
-        // Hijaunya 5, sisanya Merah, Ungu, dan Biru tetap sama seperti kemarin
+        // Hijaunya 5, sisanya Merah, Ungu, dan Biru
         if (i >= 17)
           c = "#3d7bfd"; // Biru ujung
         else if (i >= 13)
           c = "#b34dff"; // Ungu
         else if (i >= 5)
           c = "#ff2b4d"; // Merah
-        else c = "#17e88f"; // Hijau (cuma 5 bar)
+        else c = "#17e88f"; // Hijau
       }
       el.style.background = c;
     });
@@ -717,166 +746,25 @@ if (window.pitwall.getLapHistory) {
       (laps || []).forEach(addLapToHistory);
     })
     .catch(() => {
-      /* main process not ready yet — live lap-complete events will still arrive */
+      
     });
 }
 
 compareLapA.addEventListener("change", drawCompare);
 compareLapB.addEventListener("change", drawCompare);
 
-const chartCompare = document.getElementById("chartCompare");
-const ctxCompare = chartCompare.getContext("2d");
-
-// Daftarkan event listener untuk dropdown metrik baru
-const compareMetric = document.getElementById("compareMetric");
-compareMetric.addEventListener("change", drawCompare);
-
-// Fungsi render series sekarang menerima nama properti (prop) dan opsi garis putus-putus
-// Hapus parameter maxT, kita gak butuh waktu lagi
-function drawCompareSeries(ctx, canvas, samples, color, gutter, maxVal, prop, isDashed = false) {
-  if (!samples || samples.length < 2) return;
-  ctx.beginPath();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.6 * devicePixelRatio;
-  
-  if (isDashed) ctx.setLineDash([4, 4]); 
-  else ctx.setLineDash([]);
-
-  const plotW = canvas.width - gutter;
-  const n = samples.length - 1;
-
-  samples.forEach((s, i) => {
-    const x = gutter + (i / n) * plotW;
-    const y = canvas.height - (s[prop] / (maxVal || 1)) * canvas.height * 0.88 - 4;
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-  ctx.setLineDash([]);
-}
-
-function drawCompare() {
-  const r = chartCompare.getBoundingClientRect();
-  if (r.width > 0 && r.height > 0) {
-    chartCompare.width = r.width * devicePixelRatio;
-    chartCompare.height = r.height * devicePixelRatio;
-  }
-
-  const a = lapHistoryMap[Number(compareLapA.value)];
-  const b = lapHistoryMap[Number(compareLapB.value)];
-  const metric = compareMetric.value || "speed";
-
-  const maxT = Math.max(
-    a ? a.samples[a.samples.length - 1].t : 0,
-    b ? b.samples[b.samples.length - 1].t : 0,
-    1000,
-  );
-
-  ctxCompare.clearRect(0, 0, chartCompare.width, chartCompare.height);
-
-  if (metric === "speed") {
-    const maxSpeed = Math.max(
-      a ? Math.max(...a.samples.map((s) => s.speed)) : 0,
-      b ? Math.max(...b.samples.map((s) => s.speed)) : 0,
-      100,
-    );
-    const ticks = [0, 1, 2, 3, 4].map((i) => String(Math.round((maxSpeed * (4 - i)) / 4)));
-    const gutter = drawAxisGrid(ctxCompare, chartCompare, ticks);
-    
-    drawCompareSeries(
-      ctxCompare,
-      chartCompare,
-      a?.samples,
-      "#00d4ff",
-      gutter,
-      maxSpeed,
-      "speed",
-    );
-    drawCompareSeries(
-      ctxCompare,
-      chartCompare,
-      b?.samples,
-      "#b34dff",
-      gutter,
-      maxSpeed,
-      "speed",
-    );
-  } 
-  else if (metric === "rpm") {
-    const maxRpm = state.maxRpm || 13000;
-    const ticks = [0, 1, 2, 3, 4].map((i) => String(Math.round((maxRpm * (4 - i)) / 4 / 100) * 100));
-    const gutter = drawAxisGrid(ctxCompare, chartCompare, ticks);
-    
-    drawCompareSeries(
-      ctxCompare,
-      chartCompare,
-      a?.samples,
-      "#00d4ff",
-      gutter,
-      maxRpm,
-      "rpm",
-    );
-    drawCompareSeries(
-      ctxCompare,
-      chartCompare,
-      b?.samples,
-      "#b34dff",
-      gutter,
-      maxRpm,
-      "rpm",
-    );
-  } 
-  else if (metric === "tb") {
-    // Gas & Rem range: 0 sampai 1
-    const ticks = ["100%", "75%", "50%", "25%", "0%"];
-    const gutter = drawAxisGrid(ctxCompare, chartCompare, ticks);
-    
-    // Lap A (Cyan) -> Solid=Gas, Dashed=Rem
-    drawCompareSeries(ctxCompare, chartCompare, a?.samples, "#00d4ff", gutter, 1, "throttle", false);
-    drawCompareSeries(ctxCompare, chartCompare, a?.samples, "#00d4ff", gutter, 1, "brake", true);
-    drawCompareSeries(ctxCompare, chartCompare, b?.samples, "#b34dff", gutter, 1, "throttle", false);
-    drawCompareSeries(ctxCompare, chartCompare, b?.samples, "#b34dff", gutter, 1, "brake", true);
-}
-}
-
-// ---------------------------------------------------------------------------
-// ---- telemetry charts: 4 always-visible small multiples + lap trend + compare ----
-// Gas/Rem, Speed, RPM and Lap-time trend each get their own canvas + a live
-// numeric readout in the header (see #chartsGrid in index.html), so nothing
-// needs tab-switching and every trace is legible at a glance. The lap-trend
-// chart scrolls horizontally as more laps come in (see #lapScrollWrap), and
-// the compare panel overlays any two recorded laps' speed traces.
-// ---------------------------------------------------------------------------
-const chartTB = document.getElementById("chartTB");
-const ctxTB = chartTB.getContext("2d");
-const chartSpeed = document.getElementById("chartSpeed");
-const ctxSpeed = chartSpeed.getContext("2d");
-const chartRpm = document.getElementById("chartRpm");
-const ctxRpm = chartRpm.getContext("2d");
-const chartLap = document.getElementById("chartLap");
-const ctxLap = chartLap.getContext("2d");
-const lapScrollWrap = document.getElementById("lapScrollWrap");
-
-const ALL_CHARTS = [
-  { canvas: chartTB, ctx: ctxTB, draw: drawTB },
-  { canvas: chartSpeed, ctx: ctxSpeed, draw: drawSpeed },
-  { canvas: chartRpm, ctx: ctxRpm, draw: drawRpm },
-  { canvas: chartLap, ctx: ctxLap, draw: drawLap, ownWidth: true },
-  { canvas: chartCompare, ctx: ctxCompare, draw: drawCompare },
-];
-
 const PX_PER_LAP = 46; // how much horizontal room each lap point gets in the scrollable trend chart
 
 function resizeAllCharts() {
   ALL_CHARTS.forEach(({ canvas, ownWidth }) => {
     if (ownWidth) {
-      // width is driven by lap count (see drawLap), only sync height here
       const r = canvas.getBoundingClientRect();
       if (r.height === 0) return;
       canvas.height = r.height * devicePixelRatio;
       return;
     }
     const r = canvas.getBoundingClientRect();
-    if (r.width === 0 || r.height === 0) return; // hidden page, skip for now
+    if (r.width === 0 || r.height === 0) return;
     canvas.width = r.width * devicePixelRatio;
     canvas.height = r.height * devicePixelRatio;
   });
@@ -886,7 +774,7 @@ window.addEventListener("resize", () => {
   clearTimeout(window._chartResizeT);
   window._chartResizeT = setTimeout(resizeAllCharts, 120);
 });
-setTimeout(resizeAllCharts, 300); // once after first paint/layout settles
+setTimeout(resizeAllCharts, 300);
 
 function drawGrid(ctx, canvas) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -928,7 +816,6 @@ function drawAxisGrid(ctx, canvas, tickLabels) {
     tickLabels.forEach((label, i) => {
       if (label === undefined || label === null) return;
       const y = (canvas.height / 4) * i;
-      // nudge the top/bottom labels inward so they don't clip off-canvas
       const ty =
         i === 0
           ? y + 7 * devicePixelRatio
