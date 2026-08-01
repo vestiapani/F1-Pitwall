@@ -95,8 +95,6 @@ function initServer(send) {
       // --------------------------------------------------
       // ROUTING STIK 2 (Tombol Makro)
       // --------------------------------------------------
-      // Lu bisa binding fungsi ini di dalam game F1 nanti.
-      // Contoh pemetaannya (bebas diganti tombol apa aja):
 
       // MACRO_OT dipetakan ke tombol 'A' di Stik 2
       if (data.MACRO_OT !== lastIn.MACRO_OT) {
@@ -120,6 +118,41 @@ function initServer(send) {
       if (data.BB_MINUS !== lastIn.BB_MINUS) {
         controller2.button.Y.setValue(data.BB_MINUS ? 1 : 0);
         lastIn.BB_MINUS = data.BB_MINUS;
+      }
+      // DRS dipetakan ke tombol 'RB' (Right Bumper) di Stik 2
+      if (data.MACRO_DRS !== lastIn.MACRO_DRS) { 
+        controller2.button.RIGHT_SHOULDER.setValue(data.MACRO_DRS ? 1 : 0); 
+        lastIn.MACRO_DRS = data.MACRO_DRS; 
+      }
+      
+      // ERS+ dipetakan ke 'D-Pad Atas' di Stik 2
+      if (data.MACRO_ERS_PLUS !== lastIn.MACRO_ERS_PLUS) { 
+        controller2.button.DPAD_UP.setValue(data.MACRO_ERS_PLUS ? 1 : 0); 
+        lastIn.MACRO_ERS_PLUS = data.MACRO_ERS_PLUS; 
+      }
+      
+      // ERS- dipetakan ke 'D-Pad Bawah' di Stik 2
+      if (data.MACRO_ERS_MINUS !== lastIn.MACRO_ERS_MINUS) { 
+        controller2.button.DPAD_DOWN.setValue(data.MACRO_ERS_MINUS ? 1 : 0); 
+        lastIn.MACRO_ERS_MINUS = data.MACRO_ERS_MINUS; 
+      }
+      
+      // DIFF+ dipetakan ke 'D-Pad Kanan' di Stik 2
+      if (data.MACRO_DIFF_PLUS !== lastIn.MACRO_DIFF_PLUS) { 
+        controller2.button.DPAD_RIGHT.setValue(data.MACRO_DIFF_PLUS ? 1 : 0); 
+        lastIn.MACRO_DIFF_PLUS = data.MACRO_DIFF_PLUS; 
+      }
+
+      // DIFF- dipetakan ke 'D-Pad Kiri' di Stik 2 (INI YANG BARU)
+      if (data.MACRO_DIFF_MINUS !== lastIn.MACRO_DIFF_MINUS) { 
+        controller2.button.DPAD_LEFT.setValue(data.MACRO_DIFF_MINUS ? 1 : 0); 
+        lastIn.MACRO_DIFF_MINUS = data.MACRO_DIFF_MINUS; 
+      }
+
+      // RADIO dipetakan ke 'LB' (Left Bumper) di Stik 2 (Kalau lu pake)
+      if (data.MACRO_RADIO !== lastIn.MACRO_RADIO) { 
+        controller2.button.LEFT_SHOULDER.setValue(data.MACRO_RADIO ? 1 : 0); 
+        lastIn.MACRO_RADIO = data.MACRO_RADIO; 
       }
     });
 
