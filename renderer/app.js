@@ -780,8 +780,10 @@ function drawGrid(ctx, canvas) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.strokeStyle = "rgba(35,43,56,0.9)";
   ctx.lineWidth = 1;
+  const padY = 3 * devicePixelRatio;
+  const plotH = canvas.height - padY * 2;
   for (let i = 0; i <= 4; i++) {
-    const y = (canvas.height / 4) * i;
+    const y = padY + (plotH / 4) * i;
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(canvas.width, y);
@@ -797,11 +799,13 @@ function drawGrid(ctx, canvas) {
 function drawAxisGrid(ctx, canvas, tickLabels) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   const gutter = 36 * devicePixelRatio;
+  const padY = 3 * devicePixelRatio;
+  const plotH = canvas.height - padY * 2;
 
   ctx.strokeStyle = "rgba(35,43,56,0.9)";
   ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
-    const y = (canvas.height / 4) * i;
+    const y = padY + (plotH / 4) * i;
     ctx.beginPath();
     ctx.moveTo(gutter, y);
     ctx.lineTo(canvas.width, y);
@@ -815,14 +819,8 @@ function drawAxisGrid(ctx, canvas, tickLabels) {
     ctx.textBaseline = "middle";
     tickLabels.forEach((label, i) => {
       if (label === undefined || label === null) return;
-      const y = (canvas.height / 4) * i;
-      const ty =
-        i === 0
-          ? y + 7 * devicePixelRatio
-          : i === 4
-            ? y - 7 * devicePixelRatio
-            : y;
-      ctx.fillText(label, gutter - 6 * devicePixelRatio, ty);
+      const y = padY + (plotH / 4) * i;
+      ctx.fillText(label, gutter - 6 * devicePixelRatio, y);
     });
   }
 
@@ -836,9 +834,11 @@ function drawSeries(ctx, canvas, values, color, max, gutter = 0) {
   ctx.lineWidth = 1.6 * devicePixelRatio;
   const n = values.length;
   const plotW = canvas.width - gutter;
+  const padY = 3 * devicePixelRatio;
+  const plotH = canvas.height - padY * 2;
   values.forEach((v, i) => {
     const x = gutter + (i / (n - 1 || 1)) * plotW;
-    const y = canvas.height - (v / (max || 1)) * canvas.height * 0.88 - 4;
+    const y = padY + plotH - (v / (max || 1)) * plotH;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
   ctx.stroke();
@@ -910,8 +910,9 @@ function drawLap() {
       // Lap lambat (v besar) posisinya di atas (y kecil)
       // Lap cepat (v kecil) posisinya di bawah (y besar mendekati height)
       const transformed = v - min;
-      const y =
-        chartLap.height - 4 - (transformed / range) * chartLap.height * 0.88;
+       const padY = 3 * devicePixelRatio;
+       const plotH = chartLap.height - padY * 2;
+       const y = padY + plotH - (transformed / range) * plotH;
 
       return { x, y, v };
     })

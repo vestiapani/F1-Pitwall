@@ -22,12 +22,13 @@ function drawCompareSeries(
   else ctx.setLineDash([]);
 
   const plotW = canvas.width - gutter;
+  const padY = 3 * devicePixelRatio;
+  const plotH = canvas.height - padY * 2;
   const n = samples.length - 1;
 
   samples.forEach((s, i) => {
     const x = gutter + (i / n) * plotW;
-    const y =
-      canvas.height - (s[prop] / (maxVal || 1)) * canvas.height * 0.88 - 4;
+    const y = padY + plotH - (s[prop] / (maxVal || 1)) * plotH;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
   ctx.stroke();
@@ -93,7 +94,7 @@ function drawCompare() {
       ctxCompare,
       chartCompare,
       a?.samples,
-      "#00d4ff",
+      "#ffee00",
       gutter,
       maxRpm,
       "rpm",
@@ -172,11 +173,10 @@ const ctxRpm = chartRpm.getContext("2d");
 const chartLap = document.getElementById("chartLap");
 const ctxLap = chartLap.getContext("2d");
 const lapScrollWrap = document.getElementById("lapScrollWrap");
-
 const ALL_CHARTS = [
-  { canvas: chartTB, ctx: ctxTB, draw: drawTB },
-  { canvas: chartSpeed, ctx: ctxSpeed, draw: drawSpeed },
-  { canvas: chartRpm, ctx: ctxRpm, draw: drawRpm },
-  { canvas: chartLap, ctx: ctxLap, draw: drawLap, ownWidth: true },
-  { canvas: chartCompare, ctx: ctxCompare, draw: drawCompare },
+  { canvas: chartTB, ctx: ctxTB, draw: () => drawTB() },
+  { canvas: chartSpeed, ctx: ctxSpeed, draw: () => drawSpeed() },
+  { canvas: chartRpm, ctx: ctxRpm, draw: () => drawRpm() },
+  { canvas: chartLap, ctx: ctxLap, draw: () => drawLap(), ownWidth: true },
+  { canvas: chartCompare, ctx: ctxCompare, draw: () => drawCompare() },
 ];
