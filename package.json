@@ -26,6 +26,7 @@
       "main.js",
       "preload.js",
       "renderer/**/*",
+      "src/**/*",
       "package.json",
       "build/icon.ico"
     ],
