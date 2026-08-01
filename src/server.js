@@ -86,7 +86,6 @@ function initServer(send) {
         lastIn.LX = data.LX;
       }
 
-      // Fix bug: diganti dari 'state' ke 'data'
       controller1.button.START.setValue(data.START ? 1 : 0);
       controller1.button.BACK.setValue(data.SELECT ? 1 : 0);
       controller1.button.LEFT_THUMB.setValue(data.L3 ? 1 : 0);
@@ -95,64 +94,59 @@ function initServer(send) {
       // --------------------------------------------------
       // ROUTING STIK 2 (Tombol Makro)
       // --------------------------------------------------
+      const macroButtonMap = [
+        // [key dari mobile app, tombol fisik di controller2]
+        ["MACRO_OT", controller2.button.A],
+        ["MACRO_PL", controller2.button.B],
+        ["MACRO_BB_PLUS", controller2.button.X],
+        ["MACRO_BB_MINUS", controller2.button.Y],
+        ["MACRO_DRS", controller2.button.RIGHT_SHOULDER],
+        ["MACRO_RADIO", controller2.button.LEFT_SHOULDER],
+      ];
 
-      // MACRO_OT dipetakan ke tombol 'A' di Stik 2
-      if (data.MACRO_OT !== lastIn.MACRO_OT) {
-        controller2.button.A.setValue(data.MACRO_OT ? 1 : 0);
-        lastIn.MACRO_OT = data.MACRO_OT;
-      }
-
-      // PL (Pit Limiter) dipetakan ke tombol 'B' di Stik 2
-      if (data.PL !== lastIn.PL) {
-        controller2.button.B.setValue(data.PL ? 1 : 0);
-        lastIn.PL = data.PL;
-      }
-
-      // BB+ (Brake Bias Naik) dipetakan ke 'X' di Stik 2
-      if (data.BB_PLUS !== lastIn.BB_PLUS) {
-        controller2.button.X.setValue(data.BB_PLUS ? 1 : 0);
-        lastIn.BB_PLUS = data.BB_PLUS;
-      }
-
-      // BB- (Brake Bias Turun) dipetakan ke 'Y' di Stik 2
-      if (data.BB_MINUS !== lastIn.BB_MINUS) {
-        controller2.button.Y.setValue(data.BB_MINUS ? 1 : 0);
-        lastIn.BB_MINUS = data.BB_MINUS;
-      }
-      // DRS dipetakan ke tombol 'RB' (Right Bumper) di Stik 2
-      if (data.MACRO_DRS !== lastIn.MACRO_DRS) { 
-        controller2.button.RIGHT_SHOULDER.setValue(data.MACRO_DRS ? 1 : 0); 
-        lastIn.MACRO_DRS = data.MACRO_DRS; 
-      }
-      
-      // ERS+ dipetakan ke 'D-Pad Atas' di Stik 2
-      if (data.MACRO_ERS_PLUS !== lastIn.MACRO_ERS_PLUS) { 
-        controller2.button.DPAD_UP.setValue(data.MACRO_ERS_PLUS ? 1 : 0); 
-        lastIn.MACRO_ERS_PLUS = data.MACRO_ERS_PLUS; 
-      }
-      
-      // ERS- dipetakan ke 'D-Pad Bawah' di Stik 2
-      if (data.MACRO_ERS_MINUS !== lastIn.MACRO_ERS_MINUS) { 
-        controller2.button.DPAD_DOWN.setValue(data.MACRO_ERS_MINUS ? 1 : 0); 
-        lastIn.MACRO_ERS_MINUS = data.MACRO_ERS_MINUS; 
-      }
-      
-      // DIFF+ dipetakan ke 'D-Pad Kanan' di Stik 2
-      if (data.MACRO_DIFF_PLUS !== lastIn.MACRO_DIFF_PLUS) { 
-        controller2.button.DPAD_RIGHT.setValue(data.MACRO_DIFF_PLUS ? 1 : 0); 
-        lastIn.MACRO_DIFF_PLUS = data.MACRO_DIFF_PLUS; 
+      for (const [key, btn] of macroButtonMap) {
+        if (data[key] !== lastIn[key]) {
+          if (!btn || typeof btn.setValue !== "function") {
+            if (!lastIn._warned || !lastIn._warned[key]) {
+              console.warn(
+                '[server.js] Tombol Stik2 untuk "' +
+                  key +
+                  '" tidak ditemukan di controller2.button — cek nama property vigemclient.',
+              );
+              lastIn._warned = Object.assign({}, lastIn._warned, {
+                [key]: true,
+              });
+            }
+            lastIn[key] = data[key];
+            continue;
+          }
+          btn.setValue(data[key] ? 1 : 0);
+          lastIn[key] = data[key];
+        }
       }
 
-      // DIFF- dipetakan ke 'D-Pad Kiri' di Stik 2 (INI YANG BARU)
-      if (data.MACRO_DIFF_MINUS !== lastIn.MACRO_DIFF_MINUS) { 
-        controller2.button.DPAD_LEFT.setValue(data.MACRO_DIFF_MINUS ? 1 : 0); 
-        lastIn.MACRO_DIFF_MINUS = data.MACRO_DIFF_MINUS; 
+      // --------------------------------------------------
+      // ROUTING D-PAD (ERS +/- pakai axis vertikal, DIFF +/- pakai axis
+      // horizontal).
+      // --------------------------------------------------
+      const dpadVertVal = data.MACRO_ERS_PLUS
+        ? 1
+        : data.MACRO_ERS_MINUS
+          ? -1
+          : 0;
+      if (dpadVertVal !== lastIn._dpadVert) {
+        controller2.axis.dpadVert.setValue(dpadVertVal);
+        lastIn._dpadVert = dpadVertVal;
       }
 
-      // RADIO dipetakan ke 'LB' (Left Bumper) di Stik 2 (Kalau lu pake)
-      if (data.MACRO_RADIO !== lastIn.MACRO_RADIO) { 
-        controller2.button.LEFT_SHOULDER.setValue(data.MACRO_RADIO ? 1 : 0); 
-        lastIn.MACRO_RADIO = data.MACRO_RADIO; 
+      const dpadHorzVal = data.MACRO_DIFF_PLUS
+        ? 1
+        : data.MACRO_DIFF_MINUS
+          ? -1
+          : 0;
+      if (dpadHorzVal !== lastIn._dpadHorz) {
+        controller2.axis.dpadHorz.setValue(dpadHorzVal);
+        lastIn._dpadHorz = dpadHorzVal;
       }
     });
 
