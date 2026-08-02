@@ -205,9 +205,9 @@
   .lb-num{ font-variant-numeric: tabular-nums; }
   /* sector colouring: purple = fastest in session, green = personal-best improvement,
      red = not an improvement over the driver's own best for that sector */
-  .s-purple{ color:var(--purple); font-weight:700; }
-  .s-green{ color:var(--green); }
-  .s-red{ color:var(--red); }
+  .s-purple{ color:var(--purple) !important; font-weight:700; }
+  .s-green{ color:var(--green)!important; }
+  .s-red{ color:var(--red)!important; }
 
   /* track map */
   #mapPanel{ grid-column:2; grid-row:1; }
@@ -273,7 +273,14 @@
   #rpmpanel{ flex:none; }
   #rpmpanel .bd{ display:flex; align-items:center; padding:10px 12px; overflow:visible; }
   #rpmbar{ display:flex; gap:3px; width:100%; height:clamp(14px,2vh,20px); }
-  .rpmled{ flex:1; background:#1a1f28; border-radius:2px; }
+  .rpmled {
+  width: 16px; 
+  height: 16px;
+  border-radius: 50%; 
+  margin: 0 3px; 
+  background-color: #1a1f28;
+  transition: background-color 0.05s ease;
+}
   #rpmnum{ margin-left:12px; font-size:clamp(12px,1.6vh,16px); color:var(--text-dim); width:80px; text-align:right; }
   #chartpanel{ flex:1; min-height:0; }
   #chartpanel .bd{ padding:5px; overflow:hidden; display:flex; flex-direction:column; gap:6px; }

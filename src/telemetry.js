@@ -118,14 +118,14 @@ function classifySector(ds, sector, value) {
   return result;
 }
 
-function completeLapRecording(completedLapNum, lapTimeMs) {
+function completeLapRecording(completedLapNum, lapTimeMs, s1Ms, s2Ms) {
   const samples = session.currentLapSamples;
   session.currentLapSamples = [];
   session.lapStartTime = Date.now();
 
   if (!completedLapNum || samples.length < 2) return;
 
-  const entry = { lapNum: completedLapNum, lapTimeMs, samples };
+  const entry = { lapNum: completedLapNum, lapTimeMs, s1Ms, s2Ms, samples };
   session.lapHistory[completedLapNum] = entry;
 
   const keys = Object.keys(session.lapHistory)
@@ -261,7 +261,7 @@ function initTelemetry(sendCallback) {
         if (lapNum > ds.lastLapNum && ds.prevS1 && ds.prevS2 && lastLapMs) {
           ds.s3 = lastLapMs - ds.prevS1 - ds.prevS2;
           if (idx === session.playerIndex)
-            completeLapRecording(lapNum - 1, lastLapMs);
+            completeLapRecording(lapNum - 1, lastLapMs, ds.prevS1, ds.prevS2);
         }
         ds.lastLapNum = lapNum;
         if (s1) ds.prevS1 = s1;

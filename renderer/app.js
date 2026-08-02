@@ -121,7 +121,7 @@ throttleApply.addEventListener("click", async () => {
   }
 });
 
-const TOTAL_LEDS = 20;
+const TOTAL_LEDS = 15;
 const rpmbar = document.getElementById("rpmbar");
 for (let i = 0; i < TOTAL_LEDS; i++) {
   const d = document.createElement("div");
@@ -609,31 +609,41 @@ window.pitwall.on("telemetry", (d) => {
     document.getElementById("rpmPct").textContent = pct + "%";
     document.getElementById("rpmnum").textContent = Math.round(d.rpm);
 
-    // --- FIX SHIFTLIGHT F1 ---
-    // Mulai nyala di 74%, mentok di 95% (rentang 21)
+    // --- FIX SHIFTLIGHT F1 (15 LED) ---
+    // Mulai nyala di 80%, mentok di 100% (rentang 20%)
     let lit = 0;
-    if (pct >= 74) {
-      const fillRatio = Math.min(1, (pct - 74) / 21);
+    if (pct >= 80) {
+      const fillRatio = Math.min(1, (pct - 75) / 15);
       lit = Math.round(fillRatio * TOTAL_LEDS);
     }
 
+    const now = Date.now();
+    const isBlinking = lit >= 10 && now % 100 < 50;
+
     leds.forEach((el, i) => {
-      let c = "#1a1f28"; // Mati
+      let c = "#1a1f28";
+
       if (i < lit) {
-        // Hijaunya 5, sisanya Merah, Ungu, dan Biru
-        if (i >= 17)
-          c = "#3d7bfd"; // Biru ujung
-        else if (i >= 13)
-          c = "#b34dff"; // Ungu
-        else if (i >= 5)
-          c = "#ff2b4d"; // Merah
-        else c = "#17e88f"; // Hijau
+        if (isBlinking) {
+          c = "#1a1f28";
+        } else {
+          if (i >= 10) {
+            c = "#b34dff";
+          } else if (i >= 5) {
+            c = "#ff2b4d";
+          } else {
+            c = "#17e88f";
+          }
+        }
       }
+
       el.style.background = c;
+      // Aktifkan baris di bawah ini kalau lu pakai efek glow yang tadi
+      el.style.boxShadow = c === "#1a1f28" ? "none" : `0 0 8px ${c}`;
     });
 
-    // Gear jadi merah kalau udah masuk area ungu
-    document.getElementById("gearval").classList.toggle("redline", lit >= 13);
+    // Gear merah jika masuk ungu
+    document.getElementById("gearval").classList.toggle("redline", lit >= 10);
     rpmHistory.push(d.rpm);
     if (rpmHistory.length > MAX_POINTS) rpmHistory.shift();
     document.getElementById("valRpm").textContent =

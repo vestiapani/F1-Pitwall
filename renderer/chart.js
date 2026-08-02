@@ -46,13 +46,9 @@ function drawCompare() {
   const b = lapHistoryMap[Number(compareLapB.value)];
   const metric = compareMetric.value || "speed";
 
-  const maxT = Math.max(
-    a ? a.samples[a.samples.length - 1].t : 0,
-    b ? b.samples[b.samples.length - 1].t : 0,
-    1000,
-  );
-
   ctxCompare.clearRect(0, 0, chartCompare.width, chartCompare.height);
+
+  let gutter = 0;
 
   if (metric === "speed") {
     const maxSpeed = Math.max(
@@ -63,7 +59,7 @@ function drawCompare() {
     const ticks = [0, 1, 2, 3, 4].map((i) =>
       String(Math.round((maxSpeed * (4 - i)) / 4)),
     );
-    const gutter = drawAxisGrid(ctxCompare, chartCompare, ticks);
+    gutter = drawAxisGrid(ctxCompare, chartCompare, ticks);
 
     drawCompareSeries(
       ctxCompare,
@@ -88,7 +84,7 @@ function drawCompare() {
     const ticks = [0, 1, 2, 3, 4].map((i) =>
       String(Math.round((maxRpm * (4 - i)) / 4 / 100) * 100),
     );
-    const gutter = drawAxisGrid(ctxCompare, chartCompare, ticks);
+    gutter = drawAxisGrid(ctxCompare, chartCompare, ticks);
 
     drawCompareSeries(
       ctxCompare,
@@ -110,9 +106,8 @@ function drawCompare() {
     );
   } else if (metric === "tb") {
     const ticks = ["100%", "75%", "50%", "25%", "0%"];
-    const gutter = drawAxisGrid(ctxCompare, chartCompare, ticks);
+    gutter = drawAxisGrid(ctxCompare, chartCompare, ticks);
 
-    // Lap A -> Solid=Gas, Dashed=Rem
     drawCompareSeries(
       ctxCompare,
       chartCompare,
@@ -153,6 +148,30 @@ function drawCompare() {
       "brake",
       true,
     );
+  }
+
+  // --- GAMBAR GARIS SEKTOR VERTICAL (S1 & S2) ---
+  const refLap = a || b;
+  if (refLap && refLap.s1Ms && refLap.s2Ms) {
+    const plotW = chartCompare.width - gutter;
+    const xS1 = gutter + (refLap.s1Ms / refLap.lapTimeMs) * plotW;
+    const xS2 =
+      gutter + ((refLap.s1Ms + refLap.s2Ms) / refLap.lapTimeMs) * plotW;
+
+    ctxCompare.beginPath();
+    ctxCompare.strokeStyle = "rgba(255, 255, 255, 0.4)";
+    ctxCompare.lineWidth = 1 * devicePixelRatio;
+    ctxCompare.setLineDash([4, 4]);
+    ctxCompare.moveTo(xS1, 0);
+    ctxCompare.lineTo(xS1, chartCompare.height);
+    ctxCompare.moveTo(xS2, 0);
+    ctxCompare.lineTo(xS2, chartCompare.height);
+    ctxCompare.stroke();
+    ctxCompare.setLineDash([]);
+    ctxCompare.font = `${10 * devicePixelRatio}px "SFMono-Regular","Consolas",monospace`;
+    ctxCompare.fillStyle = "rgba(255, 255, 255, 0.6)";
+    ctxCompare.fillText("S1", xS1 + 4, 15 * devicePixelRatio);
+    ctxCompare.fillText("S2", xS2 + 4, 15 * devicePixelRatio);
   }
 }
 
