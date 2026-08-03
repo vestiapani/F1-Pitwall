@@ -72,9 +72,7 @@ btnWifi.addEventListener("click", async () => {
   adbStatus.textContent = "";
   try {
     await window.pitwall.adbReverseRemove();
-  } catch {
-
-  }
+  } catch {}
 });
 
 btnUsb.addEventListener("click", async () => {
@@ -101,9 +99,7 @@ async function initThrottle() {
   try {
     const ms = await window.pitwall.getPhoneThrottle();
     if (ms) throttleInput.value = ms;
-  } catch {
-
-  }
+  } catch {}
 }
 initThrottle();
 
@@ -195,9 +191,7 @@ function saveColWidths(gridId, page, widths) {
       `pitwall-cols-${gridId}-${page}`,
       JSON.stringify(widths),
     );
-  } catch {
-
-  }
+  } catch {}
 }
 function loadColWidths(gridId, page, count) {
   try {
@@ -205,9 +199,7 @@ function loadColWidths(gridId, page, count) {
     if (!raw) return null;
     const arr = JSON.parse(raw);
     if (Array.isArray(arr) && arr.length === count) return arr;
-  } catch {
-
-  }
+  } catch {}
   return null;
 }
 
@@ -416,32 +408,164 @@ window.pitwall.on("penalties", (list) => {
 });
 
 // ---- leaderboard ----
+// Perf note: this used to rebuild the entire <tbody> via innerHTML on every
+// "leaderboard" event (throttled to 200ms in telemetry.js, so ~5x/sec for
+// the whole session). Tearing down and recreating ~20 <tr> elements that
+// often forced a full-document Layout (500+ dirty objects) and a chunk of
+// GC pressure from all the discarded template strings, every single time —
+// visible in perf traces as a recurring ~20-30ms main-thread spike every
+// ~200ms. Now we keep one persistent <tr>/<td> set per driver (keyed by
+// idx) and only touch a cell's textContent/class when its value actually
+// changed, which is normally a handful of cells per update instead of the
+// whole table.
 let lastSeenLapMs = null;
+const lbRowsByIdx = new Map(); // idx -> { tr, cells: {...}, lastValues: {...} }
+
+function buildLbRow(r) {
+  const tr = document.createElement("tr");
+  const cellSpecs = [
+    "pos",
+    "driver",
+    "gap",
+    "interval",
+    "s1",
+    "s2",
+    "s3",
+    "last",
+    "best",
+    "pen",
+  ];
+  const cells = {};
+  cellSpecs.forEach((key) => {
+    const td = document.createElement("td");
+    tr.appendChild(td);
+    cells[key] = td;
+  });
+  cells.pos.className = "pos lb-num";
+  cells.gap.className = "lb-num";
+  cells.interval.className = "lb-num";
+  cells.last.className = "lb-num";
+  cells.best.className = "lb-num";
+  cells.pen.className = "lb-num";
+
+  const teamtag = document.createElement("span");
+  teamtag.className = "teamtag";
+  cells.driver.appendChild(teamtag);
+  const nameText = document.createTextNode("");
+  cells.driver.appendChild(nameText);
+  const pitBadge = document.createElement("span");
+  pitBadge.className = "pit-badge";
+  pitBadge.textContent = "PIT";
+  pitBadge.style.display = "none";
+  cells.driver.appendChild(document.createTextNode(" "));
+  cells.driver.appendChild(pitBadge);
+
+  return {
+    tr,
+    cells,
+    teamtag,
+    nameText,
+    pitBadge,
+    lastValues: {},
+  };
+}
+
+function setCellText(row, key, value) {
+  if (row.lastValues[key] === value) return;
+  row.lastValues[key] = value;
+  row.cells[key].textContent = value;
+}
+
+function setCellClass(row, key, className) {
+  const cacheKey = key + "Class";
+  if (row.lastValues[cacheKey] === className) return;
+  row.lastValues[cacheKey] = className;
+  row.cells[key].className = className;
+}
+
+function updateLbRow(row, r, isBestOverall) {
+  const trClass = (r.isPlayer ? "me" : "") + " " + (r.inPit ? "inpit" : "");
+  if (row.lastValues.trClass !== trClass) {
+    row.lastValues.trClass = trClass;
+    row.tr.className = trClass;
+  }
+
+  setCellText(row, "pos", r.position ?? "-");
+
+  if (row.lastValues.teamColor !== r.color) {
+    row.lastValues.teamColor = r.color;
+    row.teamtag.style.background = r.color;
+  }
+  if (row.lastValues.teamTag !== r.tag) {
+    row.lastValues.teamTag = r.tag;
+    row.teamtag.textContent = r.tag;
+  }
+  const nameVal = " " + r.name;
+  if (row.lastValues.name !== nameVal) {
+    row.lastValues.name = nameVal;
+    row.nameText.nodeValue = nameVal;
+  }
+  if (row.lastValues.inPit !== r.inPit) {
+    row.lastValues.inPit = r.inPit;
+    row.pitBadge.style.display = r.inPit ? "" : "none";
+  }
+
+  const gapText = fmtGapS(r.gapS);
+  setCellText(row, "gap", gapText);
+  setCellText(row, "interval", gapText);
+
+  setCellClass(row, "s1", "lb-num" + sectorCls(r.s1Cls));
+  setCellText(row, "s1", r.s1Ms ? (r.s1Ms / 1000).toFixed(3) : "—");
+  setCellClass(row, "s2", "lb-num" + sectorCls(r.s2Cls));
+  setCellText(row, "s2", r.s2Ms ? (r.s2Ms / 1000).toFixed(3) : "—");
+  setCellClass(row, "s3", "lb-num" + sectorCls(r.s3Cls));
+  setCellText(row, "s3", r.s3Ms ? (r.s3Ms / 1000).toFixed(3) : "—");
+
+  setCellText(row, "last", fmtMs(r.lastLapMs));
+
+  setCellText(row, "best", fmtMs(r.bestLapMs));
+  const bestColor = isBestOverall ? "var(--purple)" : "var(--green)";
+  if (row.lastValues.bestColor !== bestColor) {
+    row.lastValues.bestColor = bestColor;
+    row.cells.best.style.color = bestColor;
+  }
+
+  setCellText(row, "pen", r.penalties ? "+" + r.penalties + "s" : "—");
+}
+
 window.pitwall.on("leaderboard", (rows) => {
   const body = document.getElementById("lbBody");
   if (!rows || !rows.length) return;
 
+  // first-ever paint: clear the "menunggu data sesi…" placeholder row
+  if (!lbRowsByIdx.size) body.innerHTML = "";
+
   const leaderBest = Math.min(...rows.map((r) => r.bestLapMs).filter((v) => v));
 
-  body.innerHTML = rows
-    .map((r) => {
-      const isBestOverall = r.bestLapMs && r.bestLapMs === leaderBest;
-      return `
-    <tr class="${r.isPlayer ? "me" : ""} ${r.inPit ? "inpit" : ""}">
-      <td class="pos lb-num">${r.position ?? "-"}</td>
-      <td><span class="teamtag" style="background:${r.color}">${r.tag}</span> ${r.name}${r.inPit ? ' <span class="pit-badge">PIT</span>' : ""}</td>
-      <td class="lb-num">${fmtGapS(r.gapS)}</td>
-      <td class="lb-num">${fmtGapS(r.gapS)}</td>
-      <td class="lb-num${sectorCls(r.s1Cls)}">${r.s1Ms ? (r.s1Ms / 1000).toFixed(3) : "—"}</td>
-      <td class="lb-num${sectorCls(r.s2Cls)}">${r.s2Ms ? (r.s2Ms / 1000).toFixed(3) : "—"}</td>
-      <td class="lb-num${sectorCls(r.s3Cls)}">${r.s3Ms ? (r.s3Ms / 1000).toFixed(3) : "—"}</td>
-      <td class="lb-num">${fmtMs(r.lastLapMs)}</td>
-      <td class="lb-num" style="color:${isBestOverall ? "var(--purple)" : "var(--green)"}">${fmtMs(r.bestLapMs)}</td>
-      <td class="lb-num">${r.penalties ? "+" + r.penalties + "s" : "—"}</td>
-    </tr>
-  `;
-    })
-    .join("");
+  rows.forEach((r, position) => {
+    const isBestOverall = r.bestLapMs && r.bestLapMs === leaderBest;
+    let row = lbRowsByIdx.get(r.idx);
+    if (!row) {
+      row = buildLbRow(r);
+      lbRowsByIdx.set(r.idx, row);
+    }
+    updateLbRow(row, r, isBestOverall);
+    // keep DOM order in sync with current race order
+    const expectedNode = body.children[position];
+    if (expectedNode !== row.tr)
+      body.insertBefore(row.tr, expectedNode || null);
+  });
+
+  // drop rows for drivers no longer present (e.g. session change)
+  if (lbRowsByIdx.size > rows.length) {
+    const presentIdx = new Set(rows.map((r) => r.idx));
+    for (const [idx, row] of lbRowsByIdx) {
+      if (!presentIdx.has(idx)) {
+        row.tr.remove();
+        lbRowsByIdx.delete(idx);
+      }
+    }
+  }
 
   const me = rows.find((r) => r.isPlayer);
   if (me) {
@@ -526,15 +650,25 @@ window.pitwall.on("car-positions", ({ positions, bounds }) => {
     const proj = projectToSvg(p.x, p.z, useBounds);
     let dot = carDots[p.idx];
     if (!dot) {
+      // cx/cy are plotted at the origin and never touched again — actual
+      // positioning happens purely via `transform` below (see style.css:
+      // .car-dot's transition is on `transform`, not cx/cy). Chromium can't
+      // run cx/cy attribute animations on the compositor thread, so driving
+      // ~20 dots' positions through them at 15Hz was forcing a full
+      // main-thread animation recalc on every single position update
+      // (visible in perf traces as repeated "Animation compositeFailed"
+      // events). `transform` is GPU-compositable, so this update becomes
+      // effectively free on the main thread.
       dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      dot.setAttribute("cx", 0);
+      dot.setAttribute("cy", 0);
       dot.setAttribute("r", p.isPlayer ? 4.5 : 3.2);
       dot.setAttribute("class", "car-dot" + (p.isPlayer ? " player" : ""));
       dot.setAttribute("fill", p.isPlayer ? "#00d4ff" : "#8b9bb0");
       trackSvg.appendChild(dot);
       carDots[p.idx] = dot;
     }
-    dot.setAttribute("cx", proj.x.toFixed(1));
-    dot.setAttribute("cy", proj.y.toFixed(1));
+    dot.style.transform = `translate(${proj.x.toFixed(1)}px, ${proj.y.toFixed(1)}px)`;
   });
 });
 
@@ -755,9 +889,7 @@ if (window.pitwall.getLapHistory) {
     .then((laps) => {
       (laps || []).forEach(addLapToHistory);
     })
-    .catch(() => {
-      
-    });
+    .catch(() => {});
 }
 
 compareLapA.addEventListener("change", drawCompare);
@@ -920,9 +1052,9 @@ function drawLap() {
       // Lap lambat (v besar) posisinya di atas (y kecil)
       // Lap cepat (v kecil) posisinya di bawah (y besar mendekati height)
       const transformed = v - min;
-       const padY = 3 * devicePixelRatio;
-       const plotH = chartLap.height - padY * 2;
-       const y = padY + plotH - (transformed / range) * plotH;
+      const padY = 3 * devicePixelRatio;
+      const plotH = chartLap.height - padY * 2;
+      const y = padY + plotH - (transformed / range) * plotH;
 
       return { x, y, v };
     })
@@ -1085,5 +1217,4 @@ window.pitwall.on("telemetry-status", (d) => {
     el.classList.remove("neg", "pos");
     el.classList.add(val < 0 ? "neg" : "pos");
   }
-
 });

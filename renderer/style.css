@@ -214,7 +214,7 @@
   #mapPanel .bd{ position:relative; display:flex; align-items:center; justify-content:center; }
   #trackSvg{ width:100%; height:100%; }
   .track-outline{ fill:none; stroke:#2b3648; stroke-width:2.4; }
-  .car-dot{ transition: cx .15s linear, cy .15s linear; }
+  .car-dot{ transition: transform .15s linear;}
   .car-dot.player{ stroke:var(--cyan); stroke-width:1.5; }
   #mapMeta{
     position:absolute; top:6px; left:8px; font-family:var(--cond); font-size:11px;
