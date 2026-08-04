@@ -92,8 +92,6 @@ let lastKnownTelemetry = { speed: 0, rpm: 0, throttle: 0, brake: 0 };
 let traceLapIndex = -1;
 let traceStarted = false;
 let traceBounds = null;
-// Buffer array persisten dipake ulang tiap motion tick, biar nggak bikin
-// array + N object baru tiap 66ms (lihat catatan di handler motion).
 let positionsBuf = null;
 
 function classifySector(ds, sector, value) {
@@ -153,14 +151,6 @@ function initTelemetry(sendCallback) {
 
   f1.on(PACKETS.carTelemetry, (data) => {
     const now = Date.now();
-    // FIX: forEach ini dulu jalan SEBELUM throttle check di bawah, jadi
-    // ngupdate lastSpeedByIdx buat SEMUA mobil di SETIAP packet UDP mentah
-    // dari game — kalau setting UDP send rate di game lebih tinggi dari
-    // throttle software (16ms/~60Hz) di sini, loop ini jalan lebih sering
-    // dari itu, tanpa batas atas. Dipindah ke bawah throttle check biar
-    // ikut kena batasan ~60Hz yang sama; lastSpeedByIdx cuma dipakai buat
-    // hitung gap/interval di lapData yang di-throttle 200ms, jadi freshness
-    // 60Hz udah lebih dari cukup.
     if (now - lastCarTelemetryTime < 16) return;
     lastCarTelemetryTime = now;
     data.m_carTelemetryData.forEach((p, idx) => {
@@ -217,7 +207,13 @@ function initTelemetry(sendCallback) {
       tyreCompound: p.m_visualTyreCompound,
       tyreAge: p.m_tyresAgeLaps,
     });
-    const myFlag = FLAG_NAME[p.m_vehicleFiaFlags] ?? "NONE";
+
+    let myFlag = FLAG_NAME[p.m_vehicleFiaFlags] ?? "NONE";
+    const me = session.leaderboard.find((r) => r.isPlayer);
+    if (myFlag === "BLUE" && me && me.position === 1) {
+      myFlag = "NONE";
+    }
+
     send("flags", {
       zones: session.flags,
       trackStatus: session.trackStatus,
@@ -427,12 +423,6 @@ function initTelemetry(sendCallback) {
     lastMotionTime = now;
 
     const cars = data.m_carMotionData;
-    // FIX: sebelumnya `cars.map(...)` bikin array BARU isinya N object BARU
-    // (satu per mobil, ~20) di SETIAP motion tick (~15Hz, terus-menerus,
-    // baik di garasi maupun di track). Itu artinya ratusan object kecil
-    // dibuang tiap detik sepanjang sesi — beban alokasi/GC yang konstan,
-    // bukan cuma pas keluar garasi. Sekarang objectnya dipakai ulang
-    // (buffer persisten), tinggal di-update value-nya tiap tick.
     if (!positionsBuf || positionsBuf.length !== cars.length) {
       positionsBuf = cars.map((_, idx) => ({
         idx,
@@ -493,16 +483,6 @@ function initTelemetry(sendCallback) {
           }
         }
       }
-      // FIX (ping spike waktu keluar garasi): sebelumnya blok ini ngirim
-      // ULANG SELURUH array session.trackTrace lewat IPC di SETIAP motion
-      // tick (~15Hz) selama trace belum "done" — bukan cuma pas ada titik
-      // baru nempel. Di garasi posisi ~(0,0) jadi blok ini nggak pernah
-      // jalan sama sekali (aman). Begitu keluar & jalan, array trace terus
-      // membesar dan di-serialize ulang ke jendela PC 15x/detik terus-
-      // menerus; kalau lap nggak pernah "nutup" bersih (umum di Practice
-      // karena keluar-masuk pit buat ganti setup), ini jalan SEPANJANG
-      // sesi dan nge-block main thread — yang kebaca sebagai ping tinggi
-      // di HP. Sekarang cuma dikirim pas emang ada titik baru ditambahin.
       if (traceStarted !== "done" && pointAdded) {
         send("track-trace", {
           points: session.trackTrace,
@@ -515,7 +495,7 @@ function initTelemetry(sendCallback) {
   });
 
   f1.start();
-  return session.lapHistory; // Kasih referensi ke main.js buat dipake IPC
+  return session.lapHistory;
 }
 
 module.exports = initTelemetry;

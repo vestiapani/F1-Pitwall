@@ -517,3 +517,17 @@
   border-top: 1px dashed var(--line);
   margin: 20px 0;
 }
+
+  .flagchip.active-double { 
+    background: rgba(255,176,32,0.22); 
+    border-color: var(--amber); 
+    color: var(--amber); 
+    animation: pulse-red 1s infinite; 
+  }
+  
+  #trackStatusBanner.danger {
+    color: var(--amber); 
+    border-color: var(--amber);
+    background: rgba(255,176,32,0.25);
+    font-weight: 700;
+  }

@@ -9,7 +9,7 @@ let io = null;
 let lapHistoryRef = {};
 let phoneThrottleMs = 150;
 let lastPhoneEmit = {};
-let controller = null;                
+let controller = null;
 
 const PC_ONLY = new Set([
   "car-positions",
@@ -17,6 +17,12 @@ const PC_ONLY = new Set([
   "leaderboard",
   "lap-complete",
 ]);
+
+const CHANNEL_THROTTLE_MS = {
+  flags: 200,
+  leaderboard: 200,
+};
+let lastChannelEmit = {};
 
 // Fungsi filter IP yang udah fix
 function getLocalIP() {
@@ -41,15 +47,25 @@ function getLocalIP() {
   return "127.0.0.1";
 }
 
-// Fungsi utama buat ngirim data (ke layar PC dan/atau Socket.io ke HP)
 function send(channel, payload) {
+  const minInterval = CHANNEL_THROTTLE_MS[channel];
+  if (minInterval) {
+    const now = Date.now();
+    if (
+      lastChannelEmit[channel] &&
+      now - lastChannelEmit[channel] < minInterval
+    ) {
+      return;
+    }
+    lastChannelEmit[channel] = now;
+  }
+
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload);
   }
 
   if (io && !PC_ONLY.has(channel)) {
     const now = Date.now();
-    // Kalau cuma khusus dikirim ke HP di kondisi tertentu:
     if (channel === "my-status") {
       io.volatile.emit("my-status", payload);
       return;

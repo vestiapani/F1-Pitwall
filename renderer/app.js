@@ -5,11 +5,6 @@
 // ---------------------------------------------------------------------------
 
 // ---- page switcher ----
-// All panels always live in the DOM and keep receiving live data no matter
-// which page is active — switching pages just re-weights/hides sections via
-// CSS ([data-page="..."] rules in index.html), so nothing needs to reload.
-
-// --- LOGIKA MODAL HELP ---
 const btnHelp = document.getElementById("btnHelp");
 const helpModal = document.getElementById("helpModal");
 const closeHelp = document.getElementById("closeHelp");
@@ -45,23 +40,16 @@ document.querySelectorAll(".navbtn").forEach((btn) => {
       .forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     appRoot.dataset.page = btn.dataset.page;
-    // Each page defines its own column count/widths in CSS (see style.css);
-    // drop any manual resize override so the new page's layout applies cleanly,
-    // then re-measure and re-drop the drag handles once the reflow settles.
     RESIZABLE_GRIDS.forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.style.gridTemplateColumns = "";
     });
     setTimeout(layoutAllResizers, 50);
-    setTimeout(resizeAllCharts, 60); // chart cells reflow with the page too
+    setTimeout(resizeAllCharts, 60);
   });
 });
 
-// ---- connection mode: WiFi (default, no action needed) vs USB (adb reverse) ----
-// The socket.io server always listens on 0.0.0.0:3000, so WiFi just works as long
-// as the phone and PC share a network. "USB" additionally runs `adb reverse
-// tcp:3000 tcp:3000` so a phone plugged in with USB debugging on can reach the
-// server via 127.0.0.1:3000 even with no shared WiFi network.
+// ---- connection mode: WiFi vs USB ----
 const btnWifi = document.getElementById("btnWifi");
 const btnUsb = document.getElementById("btnUsb");
 const adbStatus = document.getElementById("adbStatus");
@@ -147,13 +135,10 @@ function fmtGap(ms) {
     return "—";
   return (ms >= 0 ? "+" : "") + (ms / 1000).toFixed(3);
 }
-// F1 2020 has no native time-delta field in LapData, so gap/interval are derived from
-// m_totalDistance and shown in metres rather than seconds.
 function fmtGapS(s) {
   if (s === null || s === undefined || Number.isNaN(s)) return "—";
   return (s > 0 ? "+" : "") + s.toFixed(3);
 }
-// compact one-decimal lap time for the narrow chart y-axis gutter, e.g. "1:23.4"
 function fmtMsAxis(ms) {
   if (ms === null || ms === undefined || Number.isNaN(ms)) return "—";
   const abs = Math.abs(ms);
@@ -161,21 +146,12 @@ function fmtMsAxis(ms) {
   const s = ((abs % 60000) / 1000).toFixed(1).padStart(4, "0");
   return m > 0 ? `${m}:${s}` : `${(abs / 1000).toFixed(1)}`;
 }
-// sector time colour: purple = session-fastest, green = personal-best improvement,
-// red = not an improvement (see classifySector)
 function sectorCls(cls) {
   return cls ? ` s-${cls}` : "";
 }
 
 // ---------------------------------------------------------------------------
-// ---- resizable columns (drag dividers between grid panels) ----
-// Works generically over the two multi-column grids (#zoneA, #zoneB): measures
-// whichever direct-child columns are currently visible, drops a thin draggable
-// handle between each adjacent pair, and dragging adjusts just that pair of
-// tracks (converted to px) while leaving the others alone. Because Overview /
-// Telemetry / Timing each define a different column count via CSS, the inline
-// override is cleared on every page switch (see the navbtn handler above) so
-// the new page's own layout takes over before we re-measure.
+// ---- resizable columns ----
 // ---------------------------------------------------------------------------
 const RESIZABLE_GRIDS = ["zoneA", "zoneB"];
 
@@ -255,7 +231,7 @@ function layoutResizers(gridId) {
           .gridTemplateColumns.split(" ")
           .map((v) => parseFloat(v));
         saveColWidths(gridId, appRoot.dataset.page, finalWidths);
-        layoutResizers(gridId); // re-drop handles at their new boundaries
+        layoutResizers(gridId);
       }
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
@@ -271,7 +247,7 @@ window.addEventListener("resize", () => {
   clearTimeout(window._resizeT);
   window._resizeT = setTimeout(layoutAllResizers, 120);
 });
-setTimeout(layoutAllResizers, 300); // once after first paint/layout settles
+setTimeout(layoutAllResizers, 300);
 
 // ---- top strip / connection status ----
 window.pitwall.on("network-info", ({ ip, port }) => {
@@ -331,22 +307,24 @@ window.pitwall.on("session-info", (s) => {
 });
 
 // ---- flags ----
-// F1 2020 gives two independent flag signals: the marshal-zone list (track-wide, from the
-// Session packet) and m_vehicleFiaFlags (personal, from the CarStatus packet — "what flag
-// is being shown to me right now"). We OR them together so either source can light a chip.
 window.pitwall.on("flags", ({ zones, trackStatus, ownCarFlag }) => {
   const present = new Set((zones || []).map((z) => z.flag));
   if (ownCarFlag) present.add(ownCarFlag);
 
+  const yellowCount = (zones || []).filter((z) => z.flag === "YELLOW").length;
+  const isDoubleYellow = yellowCount >= 2;
+
   const map = {
     flagGreen: present.has("GREEN") || present.size === 0,
-    flagYellow: present.has("YELLOW"),
+    flagYellow: present.has("YELLOW") && !isDoubleYellow,
+    flagDoubleYellow: isDoubleYellow,
     flagBlue: present.has("BLUE"),
     flagRed: present.has("RED"),
   };
+
   document
     .getElementById("flagGreen")
-    .classList.toggle("active-green", map.flagGreen && !map.flagYellow);
+    .classList.toggle("active-green", map.flagGreen);
   document
     .getElementById("flagYellow")
     .classList.toggle("active-yellow", map.flagYellow);
@@ -354,16 +332,19 @@ window.pitwall.on("flags", ({ zones, trackStatus, ownCarFlag }) => {
     .getElementById("flagBlue")
     .classList.toggle("active-blue", map.flagBlue);
 
-  // "double yellow" = 2+ zones simultaneously showing yellow
-  const yellowCount = (zones || []).filter((z) => z.flag === "YELLOW").length;
-  document
-    .getElementById("flagDoubleYellow")
-    .classList.toggle("active-yellow", yellowCount >= 2);
+  // Make sure you have a #flagDoubleYellow in your HTML!
+  const flagDoubleYellowEl = document.getElementById("flagDoubleYellow");
+  if (flagDoubleYellowEl) {
+    flagDoubleYellowEl.classList.toggle("active-double", map.flagDoubleYellow);
+  }
 
   if (trackStatus) {
     const banner = document.getElementById("trackStatusBanner");
-    banner.textContent = trackStatus;
-    banner.classList.toggle("warn", trackStatus !== "CLEAR");
+    banner.textContent = isDoubleYellow
+      ? "DOUBLE YELLOW — NO OVERTAKING"
+      : trackStatus;
+    banner.classList.toggle("warn", trackStatus !== "CLEAR" && !isDoubleYellow);
+    banner.classList.toggle("danger", isDoubleYellow);
   }
 });
 
@@ -408,18 +389,8 @@ window.pitwall.on("penalties", (list) => {
 });
 
 // ---- leaderboard ----
-// Perf note: this used to rebuild the entire <tbody> via innerHTML on every
-// "leaderboard" event (throttled to 200ms in telemetry.js, so ~5x/sec for
-// the whole session). Tearing down and recreating ~20 <tr> elements that
-// often forced a full-document Layout (500+ dirty objects) and a chunk of
-// GC pressure from all the discarded template strings, every single time —
-// visible in perf traces as a recurring ~20-30ms main-thread spike every
-// ~200ms. Now we keep one persistent <tr>/<td> set per driver (keyed by
-// idx) and only touch a cell's textContent/class when its value actually
-// changed, which is normally a handful of cells per update instead of the
-// whole table.
 let lastSeenLapMs = null;
-const lbRowsByIdx = new Map(); // idx -> { tr, cells: {...}, lastValues: {...} }
+const lbRowsByIdx = new Map();
 
 function buildLbRow(r) {
   const tr = document.createElement("tr");
@@ -537,7 +508,6 @@ window.pitwall.on("leaderboard", (rows) => {
   const body = document.getElementById("lbBody");
   if (!rows || !rows.length) return;
 
-  // first-ever paint: clear the "menunggu data sesi…" placeholder row
   if (!lbRowsByIdx.size) body.innerHTML = "";
 
   const leaderBest = Math.min(...rows.map((r) => r.bestLapMs).filter((v) => v));
@@ -550,13 +520,11 @@ window.pitwall.on("leaderboard", (rows) => {
       lbRowsByIdx.set(r.idx, row);
     }
     updateLbRow(row, r, isBestOverall);
-    // keep DOM order in sync with current race order
     const expectedNode = body.children[position];
     if (expectedNode !== row.tr)
       body.insertBefore(row.tr, expectedNode || null);
   });
 
-  // drop rows for drivers no longer present (e.g. session change)
   if (lbRowsByIdx.size > rows.length) {
     const presentIdx = new Set(rows.map((r) => r.idx));
     for (const [idx, row] of lbRowsByIdx) {
@@ -593,7 +561,7 @@ window.pitwall.on("leaderboard", (rows) => {
   }
 });
 
-// ---- track map: live-traced outline + car dots ----
+// ---- track map ----
 const trackSvg = document.getElementById("trackSvg");
 let currentBounds = null;
 let outlinePath = null;
@@ -646,19 +614,10 @@ window.pitwall.on("car-positions", ({ positions, bounds }) => {
   if (!useBounds) return;
 
   positions.forEach((p) => {
-    if (Math.abs(p.x) < 0.01 && Math.abs(p.z) < 0.01) return; // not on track
+    if (Math.abs(p.x) < 0.01 && Math.abs(p.z) < 0.01) return;
     const proj = projectToSvg(p.x, p.z, useBounds);
     let dot = carDots[p.idx];
     if (!dot) {
-      // cx/cy are plotted at the origin and never touched again — actual
-      // positioning happens purely via `transform` below (see style.css:
-      // .car-dot's transition is on `transform`, not cx/cy). Chromium can't
-      // run cx/cy attribute animations on the compositor thread, so driving
-      // ~20 dots' positions through them at 15Hz was forcing a full
-      // main-thread animation recalc on every single position update
-      // (visible in perf traces as repeated "Animation compositeFailed"
-      // events). `transform` is GPU-compositable, so this update becomes
-      // effectively free on the main thread.
       dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
       dot.setAttribute("cx", 0);
       dot.setAttribute("cy", 0);
@@ -704,8 +663,8 @@ const throttleHistory = [];
 const brakeHistory = [];
 const speedHistory = [];
 const rpmHistory = [];
-const lapTimesHistory = []; // completed player lap times (ms), fed from the leaderboard event
-const MAX_POINTS = 240; // ~60s at 4Hz
+const lapTimesHistory = [];
+const MAX_POINTS = 240;
 
 window.pitwall.on("telemetry", (d) => {
   if (d.maxRpm) state.maxRpm = d.maxRpm;
@@ -743,8 +702,6 @@ window.pitwall.on("telemetry", (d) => {
     document.getElementById("rpmPct").textContent = pct + "%";
     document.getElementById("rpmnum").textContent = Math.round(d.rpm);
 
-    // --- FIX SHIFTLIGHT F1 (15 LED) ---
-    // Mulai nyala di 80%, mentok di 100% (rentang 20%)
     let lit = 0;
     if (pct >= 80) {
       const fillRatio = Math.min(1, (pct - 75) / 15);
@@ -772,11 +729,9 @@ window.pitwall.on("telemetry", (d) => {
       }
 
       el.style.background = c;
-      // Aktifkan baris di bawah ini kalau lu pakai efek glow yang tadi
       el.style.boxShadow = c === "#1a1f28" ? "none" : `0 0 8px ${c}`;
     });
 
-    // Gear merah jika masuk ungu
     document.getElementById("gearval").classList.toggle("redline", lit >= 10);
     rpmHistory.push(d.rpm);
     if (rpmHistory.length > MAX_POINTS) rpmHistory.shift();
@@ -801,7 +756,6 @@ window.pitwall.on("telemetry", (d) => {
     document.getElementById("txtRR").textContent = "RR " + Math.round(rr) + "°";
   }
 
-  // brake temperatures (carTelemetry.m_brakesTemperature, order RL,RR,FL,FR)
   if (typeof d.brakeTemp !== "undefined" && d.brakeTemp) {
     const [rl, rr, fl, fr] = d.brakeTemp;
     document.getElementById("txtBFL").textContent =
@@ -814,7 +768,6 @@ window.pitwall.on("telemetry", (d) => {
       "RR " + Math.round(rr) + "°";
   }
 
-  // tyre pressures (carTelemetry.m_tyresPressure, order RL,RR,FL,FR)
   if (typeof d.tyrePressure !== "undefined" && d.tyrePressure) {
     const [rl, rr, fl, fr] = d.tyrePressure;
     document.getElementById("txtPFL").textContent = "FL " + fl.toFixed(1);
@@ -823,16 +776,15 @@ window.pitwall.on("telemetry", (d) => {
     document.getElementById("txtPRR").textContent = "RR " + rr.toFixed(1);
   }
 
-  // g-force mini gauge (motion.m_gForceLateral / m_gForceLongitudinal)
   if (
     typeof d.gForceLat !== "undefined" ||
     typeof d.gForceLon !== "undefined"
   ) {
     const lat = d.gForceLat ?? 0;
     const lon = d.gForceLon ?? 0;
-    const MAXG = 5; // clamp range for the little gauge
+    const MAXG = 5;
     const nx = Math.max(-1, Math.min(1, lat / MAXG));
-    const ny = Math.max(-1, Math.min(1, -lon / MAXG)); // braking (negative lon) shown as "up"
+    const ny = Math.max(-1, Math.min(1, -lon / MAXG));
     const dot = document.getElementById("gforceDot");
     dot.style.left = 50 + nx * 45 + "%";
     dot.style.top = 50 + ny * 45 + "%";
@@ -841,15 +793,8 @@ window.pitwall.on("telemetry", (d) => {
   }
 });
 
-// ---------------------------------------------------------------------------
 // ---- per-lap history + compare chart ----
-// main.js records a light sample stream (t, speed, rpm, throttle, brake) for
-// each completed player lap and pushes it here as "lap-complete". We keep the
-// full set in memory (also pre-populated from get-lap-history on load so a
-// renderer reload doesn't lose laps recorded earlier in the session), and let
-// the person pick any two recorded laps to overlay in the compare chart.
-// ---------------------------------------------------------------------------
-const lapHistoryMap = {}; // lapNum -> { lapNum, lapTimeMs, samples }
+const lapHistoryMap = {};
 const compareLapA = document.getElementById("compareLapA");
 const compareLapB = document.getElementById("compareLapB");
 
@@ -882,7 +827,6 @@ function addLapToHistory(entry) {
 
 window.pitwall.on("lap-complete", (entry) => addLapToHistory(entry));
 
-// pre-populate from anything recorded before this renderer instance loaded
 if (window.pitwall.getLapHistory) {
   window.pitwall
     .getLapHistory()
@@ -895,7 +839,7 @@ if (window.pitwall.getLapHistory) {
 compareLapA.addEventListener("change", drawCompare);
 compareLapB.addEventListener("change", drawCompare);
 
-const PX_PER_LAP = 46; // how much horizontal room each lap point gets in the scrollable trend chart
+const PX_PER_LAP = 46;
 
 function resizeAllCharts() {
   ALL_CHARTS.forEach(({ canvas, ownWidth }) => {
@@ -933,11 +877,6 @@ function drawGrid(ctx, canvas) {
   }
 }
 
-// Grid + a left-side value scale: draws 5 horizontal gridlines starting after
-// a reserved "gutter" on the left, and prints tickLabels[i] next to gridline i
-// (i=0 top … i=4 bottom) so you can read off what value/height any line sits
-// at — used by the Speed, RPM, Lap, and Compare charts. Returns the gutter
-// width (in device px) so the caller knows where the plottable area starts.
 function drawAxisGrid(ctx, canvas, tickLabels) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   const gutter = 36 * devicePixelRatio;
@@ -992,7 +931,6 @@ function drawTB() {
   drawSeries(ctxTB, chartTB, brakeHistory, "#ff2b4d", 1);
 }
 
-// Speed y-axis: top gridline = current max in view, bottom = 0 km/h.
 function drawSpeed() {
   const max = Math.max(100, ...speedHistory, 1);
   const ticks = [0, 1, 2, 3, 4].map((i) =>
@@ -1002,7 +940,6 @@ function drawSpeed() {
   drawSeries(ctxSpeed, chartSpeed, speedHistory, "#00d4ff", max, gutter);
 }
 
-// RPM y-axis: top gridline = car's max RPM (redline), bottom = 0.
 function drawRpm() {
   const max = state.maxRpm || 1;
   const ticks = [0, 1, 2, 3, 4].map((i) =>
@@ -1012,14 +949,6 @@ function drawRpm() {
   drawSeries(ctxRpm, chartRpm, rpmHistory, "#ff2b4d", max, gutter);
 }
 
-// Lap-time trend as a connected line, one point per completed lap: faster
-// lap sits higher on the chart, and the session-best point is highlighted
-// purple (mirrors the purple "session fastest" colour used elsewhere). The
-// y-axis gutter shows the actual lap time at each gridline (top = fastest
-// lap seen, bottom = slowest). The canvas is made wider than its container
-// as more laps come in (PX_PER_LAP per point) and lives inside a horizontally
-// scrollable wrapper (#lapScrollWrap), so the full session stays readable
-// instead of getting squeezed together.
 function drawLap() {
   const valid = lapTimesHistory.filter((v) => v);
 
@@ -1038,7 +967,6 @@ function drawLap() {
   const max = Math.max(...valid);
   const range = max - min || 1;
 
-  // Label dibalik: atas = lambat (max), bawah = cepat (min)
   const ticks = [0, 1, 2, 3, 4].map((i) => fmtMsAxis(max - (i / 4) * range));
   const gutter = drawAxisGrid(ctxLap, chartLap, ticks);
 
@@ -1049,8 +977,6 @@ function drawLap() {
       if (!v) return null;
       const x = gutter + (i / (n - 1 || 1)) * plotW;
 
-      // Lap lambat (v besar) posisinya di atas (y kecil)
-      // Lap cepat (v kecil) posisinya di bawah (y besar mendekati height)
       const transformed = v - min;
       const padY = 3 * devicePixelRatio;
       const plotH = chartLap.height - padY * 2;
@@ -1077,75 +1003,10 @@ function drawLap() {
     ctxLap.fill();
   });
 
-  // keep the freshest lap in view as the trend scrolls off to the right
   lapScrollWrap.scrollLeft = lapScrollWrap.scrollWidth;
 }
 
 window.pitwall.on("telemetry-status", (d) => {
-  if (typeof d.ersMode !== "undefined") {
-    const names = ["NONE", "MED", "HOTLAP", "OVERTAKE"];
-    document.getElementById("ersMode").textContent = names[d.ersMode] || "NONE";
-  }
-  if (typeof d.ersEnergy !== "undefined") {
-    const pct =
-      Math.min(100, Math.max(0, Math.round((d.ersEnergy / 4000000) * 100))) ||
-      0;
-    document.getElementById("ersEnergy").textContent = pct + "%";
-  }
-  if (typeof d.ersHarvestMGUK !== "undefined") {
-    setKv("ersHarvestK", (d.ersHarvestMGUK / 1000).toFixed(0) + " kJ");
-  }
-  if (typeof d.ersHarvestMGUH !== "undefined") {
-    setKv("ersHarvestH", (d.ersHarvestMGUH / 1000).toFixed(0) + " kJ");
-  }
-  if (typeof d.fuel !== "undefined") {
-    document.getElementById("fuelVal").textContent = d.fuel.toFixed(1) + " KG";
-  }
-  if (typeof d.fuelRemainingLaps !== "undefined") {
-    const low = d.fuelRemainingLaps < 1;
-    setKv(
-      "fuelLapsVal",
-      (d.fuelRemainingLaps >= 0 ? "+" : "") + d.fuelRemainingLaps.toFixed(2),
-      low ? "warn" : null,
-    );
-  }
-  if (typeof d.fuelMix !== "undefined") {
-    setKv("fuelMixVal", FUEL_MIX_NAME[d.fuelMix] || "—");
-  }
-  if (typeof d.tyreCompound !== "undefined") {
-    setKv("tyreCompoundVal", TYRE_COMPOUND_NAME[d.tyreCompound] || "—");
-  }
-  if (typeof d.tyreAge !== "undefined") {
-    setKv("tyreAgeVal", d.tyreAge + " lap");
-  }
-  if (typeof d.brakeBias !== "undefined") {
-    setKv("brakeBiasVal", d.brakeBias + "% / " + (100 - d.brakeBias) + "%");
-  }
-  if (typeof d.tractionControl !== "undefined") {
-    setKv(
-      "tcVal",
-      d.tractionControl === 0
-        ? "OFF"
-        : d.tractionControl === 1
-          ? "MEDIUM"
-          : "FULL",
-      d.tractionControl === 0 ? "off" : "on",
-    );
-  }
-  if (typeof d.absEnabled !== "undefined") {
-    setKv(
-      "absVal",
-      d.absEnabled ? "AKTIF" : "NONAKTIF",
-      d.absEnabled ? "on" : "off",
-    );
-  }
-  if (typeof d.pitLimiter !== "undefined") {
-    setKv(
-      "pitLimiterVal",
-      d.pitLimiter ? "AKTIF" : "OFF",
-      d.pitLimiter ? "warn" : "off",
-    );
-  }
   if (typeof d.ersMode !== "undefined") {
     const names = ["NONE", "MED", "HOTLAP", "OVERTAKE"];
     document.getElementById("ersMode").textContent = names[d.ersMode] || "NONE";
